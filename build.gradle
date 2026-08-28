@@ -1,0 +1,46 @@
+plugins {
+	id 'java'
+	id 'application'
+}
+
+group = 'com.eventos'
+version = '0.0.1-SNAPSHOT'
+description = 'EventOS Platform'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+application {
+	mainClass = 'com.eventos.EventosApplication'
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// Javalin REST API Framework & Web Server
+	implementation 'io.javalin:javalin:6.1.3'
+	implementation 'org.slf4j:slf4j-simple:2.0.12'
+	
+	// Jackson for JSON conversion in Javalin
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'
+	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0'
+	
+	// H2 Database Driver
+	implementation 'com.h2database:h2:2.2.224'
+	
+	// PDF Generation
+	implementation 'com.github.librepdf:openpdf:2.0.3'
+	
+	// JUnit 5 for testing
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
