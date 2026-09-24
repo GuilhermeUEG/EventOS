@@ -1,0 +1,2205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EventOS — Plataforma Acadêmica de Gestão de Eventos | POO II</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #f8fafc;
+            --bg-surface: #ffffff;
+            --bg-subtle: #f1f5f9;
+            --bg-muted: #e2e8f0;
+            
+            --border: #e2e8f0;
+            --border-hover: #cbd5e1;
+            --border-focus: #94a3b8;
+
+            --text-heading: #0f172a;
+            --text-body: #334155;
+            --text-muted: #64748b;
+            --text-light: #94a3b8;
+
+            --primary: #1e293b;
+            --primary-hover: #0f172a;
+            --primary-fg: #ffffff;
+
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --accent-subtle: #eff6ff;
+            --accent-border: #bfdbfe;
+            --accent-fg: #1d4ed8;
+
+            --success: #059669;
+            --success-subtle: #ecfdf5;
+            --success-border: #a7f3d0;
+            --success-fg: #047857;
+
+            --warning: #d97706;
+            --warning-subtle: #fffbeb;
+            --warning-border: #fde68a;
+            --warning-fg: #b45309;
+
+            --danger: #dc2626;
+            --danger-subtle: #fef2f2;
+            --danger-border: #fecaca;
+            --danger-fg: #b91c1c;
+
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-xl: 16px;
+            --radius-full: 9999px;
+
+            --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+            --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+            --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+            --shadow-dropdown: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+
+            --sidebar-w: 260px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-body);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.5;
+        }
+
+        h1, h2, h3, h4, .font-heading {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text-heading);
+            letter-spacing: -0.025em;
+            font-weight: 700;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* SVG ICONS BASE */
+        .icon {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+            stroke: currentColor;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+        .icon-sm { width: 14px; height: 14px; }
+        .icon-lg { width: 22px; height: 22px; }
+
+        /* LAYOUT */
+        .app-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: var(--sidebar-w);
+            background: #ffffff;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            z-index: 20;
+        }
+        .sidebar-brand {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .brand-badge {
+            background: var(--primary);
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 800;
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .brand-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: -0.02em;
+        }
+        .brand-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 16px 12px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .nav-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-light);
+            padding: 12px 12px 6px 12px;
+        }
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 12px;
+            border-radius: var(--radius-md);
+            color: var(--text-body);
+            font-size: 13.5px;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .nav-link:hover {
+            background: var(--bg-subtle);
+            color: var(--text-heading);
+        }
+        .nav-link.active {
+            background: var(--accent-subtle);
+            color: var(--accent-fg);
+            font-weight: 600;
+        }
+        .nav-badge {
+            margin-left: auto;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: var(--radius-full);
+            background: var(--bg-muted);
+            color: var(--text-muted);
+        }
+        .nav-link.active .nav-badge {
+            background: var(--accent-border);
+            color: var(--accent-fg);
+        }
+
+        /* SIDEBAR FOOTER & ACCOUNT SWITCHER */
+        .sidebar-footer {
+            padding: 14px 16px;
+            border-top: 1px solid var(--border);
+            background: #fafafa;
+            position: relative;
+        }
+        .user-card-pill {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: var(--radius-md);
+            background: #ffffff;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .user-card-pill:hover, .user-card-pill.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-subtle);
+        }
+        .user-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: var(--radius-full);
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            color: var(--text-heading);
+            font-size: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .user-meta {
+            flex: 1;
+            overflow: hidden;
+        }
+        .user-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-heading);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .user-role {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* ACCOUNT SWITCHER DROPDOWN */
+        .account-switcher-dropdown {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 12px;
+            right: 12px;
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-dropdown);
+            padding: 8px;
+            z-index: 50;
+            display: none;
+            max-height: 460px;
+            overflow-y: auto;
+        }
+        .account-switcher-dropdown.open {
+            display: block;
+            animation: fadeInDrop 0.15s ease-out;
+        }
+
+        @keyframes fadeInDrop {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .dropdown-section-title {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-light);
+            padding: 8px 10px 4px 10px;
+        }
+
+        .account-option-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+        .account-option-item:hover {
+            background: var(--bg-subtle);
+        }
+        .account-option-item.selected {
+            background: var(--accent-subtle);
+        }
+        .account-opt-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: var(--radius-full);
+            background: #ffffff;
+            border: 1px solid var(--border);
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-heading);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .account-opt-name {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--text-heading);
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .account-opt-role {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+        .check-indicator {
+            color: var(--accent);
+            opacity: 0;
+        }
+        .account-option-item.selected .check-indicator {
+            opacity: 1;
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 6px 0;
+        }
+
+        /* MAIN CONTENT */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-body);
+        }
+
+        .app-topbar {
+            background: #ffffff;
+            border-bottom: 1px solid var(--border);
+            padding: 12px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .event-switcher-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .event-select-dropdown {
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            color: var(--text-heading);
+            font-size: 13.5px;
+            font-weight: 600;
+            padding: 7px 14px;
+            border-radius: var(--radius-md);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+            border: 1px solid transparent;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+        .btn-secondary {
+            background: #ffffff;
+            color: var(--text-heading);
+            border-color: var(--border);
+        }
+        .btn-secondary:hover {
+            background: var(--bg-subtle);
+            border-color: var(--border-hover);
+        }
+        .btn-accent {
+            background: var(--accent);
+            color: #ffffff;
+        }
+        .btn-accent:hover {
+            background: var(--accent-hover);
+        }
+
+        /* CONTAINER */
+        .content-body {
+            padding: 32px;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* EVENT HERO BANNER */
+        .hero-banner {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            padding: 32px;
+            margin-bottom: 28px;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+        }
+        .hero-header-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .tag-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11.5px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: var(--radius-full);
+            background: var(--bg-subtle);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+        .tag-pill.blue {
+            background: var(--accent-subtle);
+            color: var(--accent-fg);
+            border-color: var(--accent-border);
+        }
+        .tag-pill.green {
+            background: var(--success-subtle);
+            color: var(--success-fg);
+            border-color: var(--success-border);
+        }
+
+        .hero-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--text-heading);
+            line-height: 1.25;
+            margin-bottom: 12px;
+            max-width: 900px;
+        }
+        .hero-desc {
+            font-size: 14.5px;
+            color: var(--text-body);
+            line-height: 1.6;
+            max-width: 880px;
+            margin-bottom: 24px;
+        }
+
+        .hero-meta-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+        .meta-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .meta-icon-sq {
+            width: 38px;
+            height: 38px;
+            border-radius: var(--radius-md);
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+        }
+        .meta-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .meta-val {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: var(--text-heading);
+        }
+
+        /* 2 COLUMN GRID */
+        .grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 28px;
+            align-items: start;
+        }
+
+        /* FILTER BAR */
+        .filter-bar {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 14px 18px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            box-shadow: var(--shadow-xs);
+            flex-wrap: wrap;
+        }
+        .filter-inputs-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+        .search-input-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: var(--radius-md);
+            min-width: 220px;
+            flex: 1;
+        }
+        .search-input-group input {
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 13px;
+            color: var(--text-heading);
+            width: 100%;
+        }
+        .select-filter {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            color: var(--text-body);
+            padding: 7px 12px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .btn-clear-filters {
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 12.5px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-clear-filters:hover {
+            background: var(--bg-muted);
+            color: var(--danger);
+            border-color: var(--danger-border);
+        }
+
+        /* ACTIVITY CARDS */
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .act-card {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 22px;
+            box-shadow: var(--shadow-xs);
+            transition: all 0.2s ease;
+            display: grid;
+            grid-template-columns: 150px 1fr auto;
+            gap: 20px;
+            align-items: center;
+        }
+        .act-card:hover {
+            border-color: var(--border-hover);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .act-time-col {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            border-right: 1px solid var(--border);
+            padding-right: 16px;
+        }
+        .act-date-pill {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+        .act-time-val {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-heading);
+        }
+        .act-room-val {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .act-body-col {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .act-tags {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .act-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-heading);
+        }
+        .act-desc {
+            font-size: 13px;
+            color: var(--text-body);
+            line-height: 1.5;
+        }
+        .act-speakers {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .act-action-col {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+            min-width: 140px;
+        }
+        .capacity-val {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        /* EMPTY STATE CARD */
+        .empty-filter-state {
+            background: #ffffff;
+            border: 1px dashed var(--border-hover);
+            border-radius: var(--radius-lg);
+            padding: 48px 24px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        /* SIDEBAR WIDGETS */
+        .widget-box {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            box-shadow: var(--shadow-xs);
+            margin-bottom: 20px;
+        }
+        .widget-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .widget-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-heading);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* MODALS */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            padding: 20px;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-box {
+            background: #ffffff;
+            border-radius: var(--radius-xl);
+            width: 100%;
+            max-width: 580px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-modal);
+            border: 1px solid var(--border);
+        }
+        .modal-box.large {
+            max-width: 780px;
+        }
+        .modal-head {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .modal-close {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 4px;
+            border-radius: var(--radius-sm);
+        }
+        .modal-close:hover {
+            color: var(--text-heading);
+            background: var(--bg-subtle);
+        }
+        .modal-content {
+            padding: 24px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 6px;
+        }
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 9px 12px;
+            font-size: 13.5px;
+            color: var(--text-heading);
+            outline: none;
+            margin-bottom: 14px;
+        }
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-subtle);
+        }
+
+        /* QR DISPLAY CARD (PROFESSOR BEAMER) */
+        .qr-beamer-card {
+            background: #0f172a;
+            color: #ffffff;
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .qr-beamer-img-wrap {
+            background: #ffffff;
+            display: inline-block;
+            padding: 16px;
+            border-radius: var(--radius-md);
+            margin: 16px auto;
+        }
+
+        /* CERTIFICATE CARD */
+        .cert-card {
+            border: 2px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            background: #ffffff;
+            margin-bottom: 12px;
+        }
+        .cert-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-heading);
+            margin-bottom: 4px;
+        }
+        .cert-code {
+            font-size: 11px;
+            background: var(--bg-subtle);
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            display: inline-block;
+            margin-top: 8px;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 1024px) {
+            .grid-2col {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                display: none;
+            }
+            .content-body {
+                padding: 16px;
+            }
+            .act-card {
+                grid-template-columns: 1fr;
+            }
+            .act-time-col {
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-layout">
+        
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-badge">E</div>
+                <div>
+                    <div class="brand-name">EventOS</div>
+                    <div class="brand-sub">POO II • Simpósio 2026</div>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <span class="nav-label">Navegação</span>
+                <a class="nav-link active" id="nav-prog" onclick="showTab('prog')">
+                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    <span>Programação Oficial</span>
+                </a>
+                <a class="nav-link" id="nav-agenda" onclick="showTab('agenda')">
+                    <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                    <span>Minha Agenda</span>
+                    <span class="nav-badge" id="sidebar-agenda-badge">0</span>
+                </a>
+                <a class="nav-link" id="nav-terminal" onclick="handleAttendanceClick()">
+                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    <span id="nav-terminal-label">Terminal de Presença</span>
+                </a>
+                <a class="nav-link" id="nav-cert" onclick="showTab('cert')">
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                    <span>Certificados & Validação</span>
+                </a>
+
+                <span class="nav-label" id="docente-section-title">Docência & Gestão</span>
+                <a class="nav-link" id="nav-admin" onclick="showTab('admin')">
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    <span>Painel Administrativo</span>
+                </a>
+            </nav>
+
+            <!-- SIDEBAR FOOTER WITH ACCOUNT SWITCHER POPUP -->
+            <div class="sidebar-footer">
+                
+                <!-- DROPDOWN POPUP -->
+                <div class="account-switcher-dropdown" id="account-dropdown">
+                    <div style="padding: 4px 10px 8px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px;">
+                        <div style="font-size: 11px; font-weight: 700; color: var(--text-heading);">Alternar Usuário de Teste</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Selecione um professor ou aluno:</div>
+                    </div>
+
+                    <div class="dropdown-section-title">Docentes / Organizadores</div>
+                    <div class="account-option-item" id="opt-user-1" onclick="selectPersonaDropdown(1, 'Prof. Marcio Giovane', 'ORGANIZER')">
+                        <div class="account-opt-avatar">MG</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="account-opt-name">Prof. Márcio Giovane</div>
+                            <div class="account-opt-role">Organizador • Palestrante</div>
+                        </div>
+                        <svg class="icon icon-sm check-indicator" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <div class="account-option-item" id="opt-user-2" onclick="selectPersonaDropdown(2, 'Prof. Joilson Brito', 'ORGANIZER')">
+                        <div class="account-opt-avatar">JB</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="account-opt-name">Prof. Joilson Brito</div>
+                            <div class="account-opt-role">Organizador • Instrutor</div>
+                        </div>
+                        <svg class="icon icon-sm check-indicator" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <div class="account-option-item" id="opt-user-3" onclick="selectPersonaDropdown(3, 'Prof. Guiliano Rangel', 'ADMIN')">
+                        <div class="account-opt-avatar">GR</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="account-opt-name">Prof. Guiliano Rangel</div>
+                            <div class="account-opt-role">Administrador • Banca</div>
+                        </div>
+                        <svg class="icon icon-sm check-indicator" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <div class="account-option-item" id="opt-user-4" onclick="selectPersonaDropdown(4, 'Profa. Juliana Braga', 'ORGANIZER')">
+                        <div class="account-opt-avatar">JB</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="account-opt-name">Profa. Juliana Braga</div>
+                            <div class="account-opt-role">Organizadora • Instrutora</div>
+                        </div>
+                        <svg class="icon icon-sm check-indicator" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+
+                    <div class="dropdown-divider"></div>
+
+                    <div class="dropdown-section-title">Discentes / Alunos</div>
+                    <div class="account-option-item selected" id="opt-user-5" onclick="selectPersonaDropdown(5, 'Guilherme Barbosa', 'PARTICIPANT')">
+                        <div class="account-opt-avatar">GB</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="account-opt-name">Guilherme Barbosa</div>
+                            <div class="account-opt-role">Discente • Participante</div>
+                        </div>
+                        <svg class="icon icon-sm check-indicator" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <div class="account-option-item" id="opt-user-6" onclick="selectPersonaDropdown(6, 'Murilo Mendes', 'PARTICIPANT')">
+                        <div class="account-opt-avatar">MM</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="account-opt-name">Murilo Mendes</div>
+                            <div class="account-opt-role">Discente • Participante</div>
+                        </div>
+                        <svg class="icon icon-sm check-indicator" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <div class="account-option-item" id="opt-user-7" onclick="selectPersonaDropdown(7, 'Danielly Mendes', 'PARTICIPANT')">
+                        <div class="account-opt-avatar">DM</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="account-opt-name">Danielly Mendes</div>
+                            <div class="account-opt-role">Discente • Participante</div>
+                        </div>
+                        <svg class="icon icon-sm check-indicator" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <div class="account-option-item" id="opt-user-8" onclick="selectPersonaDropdown(8, 'Samir Santana', 'PARTICIPANT')">
+                        <div class="account-opt-avatar">SS</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="account-opt-name">Samir Santana</div>
+                            <div class="account-opt-role">Discente • Participante</div>
+                        </div>
+                        <svg class="icon icon-sm check-indicator" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+
+                    <div class="dropdown-divider"></div>
+
+                    <div class="account-option-item" onclick="openProfileModal(); toggleAccountDropdown();">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <span style="font-size:12px; font-weight:600; color:var(--text-heading);">Ver Meu Perfil Completo</span>
+                    </div>
+                </div>
+
+                <!-- TRIGGER PILL -->
+                <div class="user-card-pill" id="user-pill-trigger" onclick="toggleAccountDropdown()">
+                    <div class="user-avatar" id="sb-user-avatar">GB</div>
+                    <div class="user-meta">
+                        <div class="user-name" id="sb-user-name">Guilherme Barbosa</div>
+                        <div class="user-role" id="sb-user-role">Participante</div>
+                    </div>
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:var(--text-muted);"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+
+            </div>
+        </aside>
+
+        <!-- MAIN VIEW WRAPPER -->
+        <div class="main-content">
+            
+            <header class="app-topbar">
+                <div class="event-switcher-wrap">
+                    <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);">Evento Atual:</span>
+                    <select class="event-select-dropdown" id="global-event-select" onchange="onEventSelectChange()">
+                        <option value="1">XV Simpósio de Tecnologia da Informação (Principal)</option>
+                    </select>
+                </div>
+
+                <div class="topbar-actions">
+                    <button class="btn-action btn-secondary" onclick="openFeedbackModal(1)">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        <span>Avaliar Atividade</span>
+                    </button>
+                    <button class="btn-action btn-primary" onclick="handleAttendanceClick()">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        <span id="topbar-terminal-btn-label">Terminal de Presença</span>
+                    </button>
+                </div>
+            </header>
+
+            <main class="content-body">
+                
+                <!-- TAB 1: PROGRAMAÇÃO -->
+                <div id="tab-prog">
+                    
+                    <!-- HERO BANNER -->
+                    <div class="hero-banner">
+                        <div class="hero-header-row">
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <span class="tag-pill blue">Evento Oficial da Disciplina</span>
+                                <span class="tag-pill green" id="hero-enrollment-badge">Você está Inscrito</span>
+                            </div>
+                            <span class="mono" style="font-size:13px; font-weight:700; color:var(--accent);">25 a 26 de Setembro de 2026</span>
+                        </div>
+
+                        <h1 class="hero-title" id="hero-event-title">XV Simpósio de Tecnologia da Informação</h1>
+                        <p class="hero-desc" id="hero-event-desc">
+                            Congresso acadêmico oficial da disciplina de Programação Orientada a Objetos II. Apresentação dos projetos integradores, palestras magnas e avaliação de arquiteturas sem acoplamento a frameworks.
+                        </p>
+
+                        <div class="hero-meta-strip">
+                            <div class="meta-card">
+                                <div class="meta-icon-sq">
+                                    <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                </div>
+                                <div>
+                                    <div class="meta-label">Data & Carga Horária</div>
+                                    <div class="meta-val">25 e 26 Set • 34 Horas</div>
+                                </div>
+                            </div>
+                            <div class="meta-card">
+                                <div class="meta-icon-sq">
+                                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                </div>
+                                <div>
+                                    <div class="meta-label">Local & Espaços</div>
+                                    <div class="meta-val">Auditório Principal & Lab 01</div>
+                                </div>
+                            </div>
+                            <div class="meta-card">
+                                <div class="meta-icon-sq">
+                                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                                </div>
+                                <div>
+                                    <div class="meta-label">Regra de Certificação</div>
+                                    <div class="meta-val">Mínimo 50% de Presença</div>
+                                </div>
+                            </div>
+                            <div class="meta-card">
+                                <div class="meta-icon-sq">
+                                    <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                                </div>
+                                <div>
+                                    <div class="meta-label">Capacidade</div>
+                                    <div class="meta-val">250 Vagas Oficiais</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2 COLUMN GRID -->
+                    <div class="grid-2col">
+                        
+                        <!-- MAIN TIMELINE -->
+                        <div>
+                            <!-- FILTER BAR WITH SEARCH AND CLEAR BUTTON -->
+                            <div class="filter-bar">
+                                <div class="filter-inputs-row">
+                                    <div class="search-input-group">
+                                        <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:var(--text-muted);"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                        <input type="text" id="filter-search" placeholder="Buscar por tema, professor ou sala..." oninput="renderActivities()">
+                                    </div>
+                                    <select class="select-filter" id="filter-track" onchange="renderActivities()">
+                                        <option value="">Todas as Trilhas</option>
+                                        <option value="Arquitetura">Trilha Arquitetura</option>
+                                        <option value="Desenvolvimento">Trilha Desenvolvimento</option>
+                                        <option value="Avaliacao">Trilha Avaliação</option>
+                                    </select>
+                                    <select class="select-filter" id="filter-type" onchange="renderActivities()">
+                                        <option value="">Todos os Formatos</option>
+                                        <option value="LECTURE">Palestras Magnas</option>
+                                        <option value="WORKSHOP">Workshops Práticos</option>
+                                        <option value="ORAL_PRESENTATION">Sessões Técnicas</option>
+                                    </select>
+                                </div>
+                                
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearFilters()" title="Redefinir todos os filtros de busca">
+                                        <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        <span>Limpar Filtros</span>
+                                    </button>
+                                    <span style="font-size:12px; color:var(--text-muted); font-weight:600;" id="activities-count-text">3 atividades</span>
+                                </div>
+                            </div>
+
+                            <div class="activity-list" id="activities-list-wrap">
+                                <!-- INJECTED -->
+                            </div>
+                        </div>
+
+                        <!-- RIGHT WIDGETS -->
+                        <div>
+                            <div class="widget-box">
+                                <div class="widget-head">
+                                    <div class="widget-title">
+                                        <svg class="icon" viewBox="0 0 24 24" style="color:var(--accent);"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                                        Minha Agenda Pessoal
+                                    </div>
+                                    <span class="tag-pill" id="widget-agenda-badge">2 ativ.</span>
+                                </div>
+                                <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:12px;">
+                                    Suas atividades marcadas sem sobreposição de horários:
+                                </p>
+                                <div id="widget-agenda-items" style="display:flex; flex-direction:column; gap:8px;">
+                                    <!-- INJECTED -->
+                                </div>
+                                <button class="btn-action btn-secondary" style="width:100%; justify-content:center; margin-top:12px;" onclick="showTab('agenda')">
+                                    Gerenciar Agenda Completa
+                                </button>
+                            </div>
+
+                            <div class="widget-box">
+                                <div class="widget-head">
+                                    <div class="widget-title">
+                                        <svg class="icon" viewBox="0 0 24 24" style="color:var(--success);"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                                        Certificação Acadêmica
+                                    </div>
+                                    <span class="tag-pill green">Regra: 50%</span>
+                                </div>
+                                <div style="background:var(--bg-subtle); height:8px; border-radius:var(--radius-full); overflow:hidden; margin:10px 0;">
+                                    <div style="width:65%; height:100%; background:var(--accent);"></div>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+                                    <span>Presença Computada: <strong>5 horas</strong></span>
+                                    <span>Meta: <strong>17 horas</strong></span>
+                                </div>
+                                <button class="btn-action btn-primary" style="width:100%; justify-content:center;" onclick="showTab('cert')">
+                                    Consultar Certificados OpenPDF
+                                </button>
+                            </div>
+
+                            <!-- TEACHER CONTROL WIDGET (ONLY VISIBLE FOR ORGANIZERS/ADMINS) -->
+                            <div class="widget-box" id="widget-teacher-box" style="border-left: 4px solid var(--accent); display:none;">
+                                <div class="widget-head">
+                                    <div class="widget-title">
+                                        <svg class="icon" viewBox="0 0 24 24" style="color:var(--accent);"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                        Controle de Sala de Aula
+                                    </div>
+                                    <span class="tag-pill blue">Painel Docente</span>
+                                </div>
+                                <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:12px;">
+                                    Projete o QR Code em tela cheia na sala ou realize a chamada manual dos alunos presentes.
+                                </p>
+                                <button class="btn-action btn-accent" style="width:100%; justify-content:center; margin-bottom:8px;" onclick="openTeacherProjectorModal()">
+                                    Projetar QR Code no Datashow
+                                </button>
+                                <button class="btn-action btn-secondary" style="width:100%; justify-content:center;" onclick="showTab('admin')">
+                                    Abrir Chamada Manual Nominal
+                                </button>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- TAB 2: MINHA AGENDA -->
+                <div id="tab-agenda" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                        <div>
+                            <h2 class="font-heading" style="font-size:20px;">Minha Agenda de Atividades</h2>
+                            <p style="font-size:13px; color:var(--text-muted);">Atividades confirmadas no seu itinerário com validação de conflitos de horário (RF-16).</p>
+                        </div>
+                        <button class="btn-action btn-secondary" onclick="showTab('prog')">Adicionar Mais Atividades</button>
+                    </div>
+
+                    <div class="activity-list" id="agenda-list-wrap">
+                        <!-- INJECTED -->
+                    </div>
+                </div>
+
+                <!-- TAB 3: CERTIFICADOS -->
+                <div id="tab-cert" style="display:none;">
+                    <div style="margin-bottom:24px;">
+                        <h2 class="font-heading" style="font-size:20px;">Certificados Acadêmicos Oficiais</h2>
+                        <p style="font-size:13px; color:var(--text-muted);">Emissão auditável com verificação de autenticidade criptográfica SHA-256 (RF-28 a RF-30).</p>
+                    </div>
+
+                    <div class="grid-2col">
+                        <div>
+                            <div class="widget-box">
+                                <h3 style="font-size:15px; font-weight:700; margin-bottom:12px;">Emitir Certificado de Participação</h3>
+                                <p style="font-size:13px; color:var(--text-body); line-height:1.6; margin-bottom:16px;">
+                                    O motor de regras valida a política de elegibilidade (<span class="mono">MinimumAttendancePercentagePolicy</span>) sobre os registros de presença antes de emitir o documento oficial.
+                                </p>
+                                <button class="btn-action btn-primary" onclick="issueCertificate()">
+                                    Processar e Emitir Certificado
+                                </button>
+                            </div>
+
+                            <h3 style="font-size:15px; font-weight:700; margin:24px 0 12px 0;">Certificados Emitidos</h3>
+                            <div id="cert-list-wrap">
+                                <!-- INJECTED -->
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="widget-box">
+                                <h3 style="font-size:15px; font-weight:700; margin-bottom:12px;">Validador Público de Autenticidade</h3>
+                                <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:14px;">
+                                    Insira o código de verificação impresso no certificado para checar a autenticidade na base do colegiado:
+                                </p>
+                                <div style="display:flex; gap:8px;">
+                                    <input type="text" class="form-input mono" id="cert-code-input" placeholder="Ex: POO2-2026-A1B2C3D4" style="margin-bottom:0;">
+                                    <button class="btn-action btn-primary" onclick="verifyCertificate()">Checar</button>
+                                </div>
+                                <div id="cert-verify-result" style="margin-top:14px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: PAINEL ADMINISTRATIVO (DOCENTES) -->
+                <div id="tab-admin" style="display:none;">
+                    <div style="margin-bottom:24px;">
+                        <h2 class="font-heading" style="font-size:20px;">Painel de Gestão & Docência</h2>
+                        <p style="font-size:13px; color:var(--text-muted);">Módulo de coordenação com validação de choque de salas e exportação de atas oficiais (RF-11, RF-31 a RF-34).</p>
+                    </div>
+
+                    <div class="grid-2col">
+                        <!-- CADASTRO DE ATIVIDADE -->
+                        <div class="widget-box">
+                            <h3 style="font-size:15px; font-weight:700; margin-bottom:14px;">Cadastrar Nova Atividade com Validador de Conflito</h3>
+                            
+                            <label class="form-label">Título da Atividade</label>
+                            <input type="text" class="form-input" id="adm-title" placeholder="Ex: Mini-curso Arquitetura Hexagonal">
+
+                            <label class="form-label">Descrição Pedagógica</label>
+                            <textarea class="form-textarea" id="adm-desc" rows="2" placeholder="Objetivos e tópicos abordados..."></textarea>
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                <div>
+                                    <label class="form-label">Sala / Espaço</label>
+                                    <input type="text" class="form-input" id="adm-room" value="Laboratorio de Informatica 01">
+                                </div>
+                                <div>
+                                    <label class="form-label">Trilha</label>
+                                    <input type="text" class="form-input" id="adm-track" value="Trilha Desenvolvimento">
+                                </div>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                <div>
+                                    <label class="form-label">Início</label>
+                                    <input type="datetime-local" class="form-input" id="adm-start" value="2026-09-25T16:00">
+                                </div>
+                                <div>
+                                    <label class="form-label">Fim</label>
+                                    <input type="datetime-local" class="form-input" id="adm-end" value="2026-09-25T18:00">
+                                </div>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                <div>
+                                    <label class="form-label">Vagas Máximas</label>
+                                    <input type="number" class="form-input" id="adm-cap" value="40">
+                                </div>
+                                <div>
+                                    <label class="form-label">Tipo</label>
+                                    <select class="form-select" id="adm-type">
+                                        <option value="WORKSHOP">Workshop</option>
+                                        <option value="LECTURE">Palestra Magna</option>
+                                        <option value="ORAL_PRESENTATION">Apresentação Oral</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button class="btn-action btn-primary" style="width:100%; justify-content:center;" onclick="createAdminActivity()">
+                                Salvar Atividade (Validar Choque de Salas)
+                            </button>
+                        </div>
+
+                        <!-- ATAS E CHAMADA MANUAL -->
+                        <div>
+                            <div class="widget-box">
+                                <h3 style="font-size:15px; font-weight:700; margin-bottom:14px;">Relatórios Oficiais do Simpósio</h3>
+                                <p style="font-size:13px; color:var(--text-body); line-height:1.5; margin-bottom:14px;">
+                                    Geração de listas e atas em conformidade com os requisitos de entrega do colegiado (RF-31, RF-32):
+                                </p>
+                                <div style="display:flex; flex-direction:column; gap:8px;">
+                                    <a href="/api/reports/enrolled/1/csv" class="btn-action btn-secondary" download>
+                                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                        <span>Exportar Lista de Inscritos (CSV)</span>
+                                    </a>
+                                    <a href="/api/reports/enrolled/1/pdf" class="btn-action btn-secondary" target="_blank">
+                                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                        <span>Relatório de Inscritos (OpenPDF)</span>
+                                    </a>
+                                    <a href="/api/reports/attendance/1/pdf" class="btn-action btn-secondary" target="_blank">
+                                        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                                        <span>Ata Geral de Frequência & Presença (PDF)</span>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="widget-box">
+                                <h3 style="font-size:15px; font-weight:700; margin-bottom:12px;">Chamada Manual de Sala (Exclusivo Docente)</h3>
+                                <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+                                    Em caso de problemas técnicos com o celular do aluno, o professor pode registrar a presença manualmente com justificativa:
+                                </p>
+                                <label class="form-label">ID do Aluno (ex: 5 = Guilherme, 6 = Murilo, 7 = Danielly, 8 = Samir)</label>
+                                <input type="number" class="form-input" id="adm-manual-uid" placeholder="ID do Aluno" value="5">
+
+                                <label class="form-label">Atividade</label>
+                                <select class="form-select" id="adm-manual-aid">
+                                    <option value="1">Atividade 1: Abertura & Palestra Magna</option>
+                                    <option value="2">Atividade 2: Workshop Prático Java</option>
+                                    <option value="3">Atividade 3: Sessão Técnica Projetos</option>
+                                </select>
+
+                                <label class="form-label">Justificativa da Presença Manual</label>
+                                <input type="text" class="form-input" id="adm-manual-just" value="Aluno presente fisicamente na bancada do laboratório">
+
+                                <button class="btn-action btn-secondary" style="width:100%; justify-content:center;" onclick="submitManualAttendance()">
+                                    Registrar Presença Manual
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </main>
+
+        </div>
+    </div>
+
+    <!-- MODAL DO PROFESSOR: PROJETOR DO QR CODE NO TELÃO -->
+    <div class="modal-overlay" id="modal-projector">
+        <div class="modal-box large">
+            <div class="modal-head">
+                <div>
+                    <h3 style="font-size:17px; font-weight:700;">Projeção de Presença Presencial (Datashow / Telão)</h3>
+                    <p style="font-size:12px; color:var(--text-muted);">Exclusivo do Professor: selecione o evento e a atividade para gerar o QR Code projetado na sala.</p>
+                </div>
+                <button class="modal-close" onclick="closeModal('modal-projector')">
+                    <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-content">
+                
+                <!-- SELETORES HIERÁRQUICOS DE EVENTO E ATIVIDADE -->
+                <div style="background:var(--bg-subtle); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                    <div>
+                        <label class="form-label" style="font-size:11px;">1. Selecione o Evento do Docente:</label>
+                        <select class="form-select" id="projector-event-select" onchange="onProjectorEventChange()" style="margin-bottom:0;">
+                            <option value="1">XV Simpósio de Tecnologia da Informação</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" style="font-size:11px;">2. Selecione a Atividade / Aula:</label>
+                        <select class="form-select" id="projector-act-select" onchange="generateProjectorToken()" style="margin-bottom:0;">
+                            <!-- INJECTED -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="qr-beamer-card">
+                    <span class="tag-pill blue" style="background:#1e293b; color:#93c5fd; border:none;">PROJEÇÃO PRESENCIAL EM SALA</span>
+                    <h2 style="color:#ffffff; font-size:20px; margin-top:8px;" id="projector-act-title">Atividade 1: Abertura & Palestra Magna</h2>
+                    
+                    <div class="qr-beamer-img-wrap">
+                        <img id="projector-qr-img" src="" alt="QR Code Dinâmico" style="width:200px; height:200px; display:block;">
+                    </div>
+
+                    <div style="font-size:12px; color:#94a3b8; font-family:'JetBrains Mono'; margin-top:4px;" id="projector-token-text">
+                        Token Criptográfico: Gerando...
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:12px; color:var(--text-muted);">
+                        O token expira periodicamente para garantir que apenas os presentes na sala registrem frequência.
+                    </span>
+                    <button class="btn-action btn-secondary" onclick="generateProjectorToken()">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                        <span>Atualizar QR Code Agora</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DO ALUNO: ESCANEAR QR CODE DO PROFESSOR -->
+    <div class="modal-overlay" id="modal-scanner">
+        <div class="modal-box">
+            <div class="modal-head">
+                <div>
+                    <h3 style="font-size:17px; font-weight:700;">Registrar Presença na Atividade</h3>
+                    <p style="font-size:12px; color:var(--text-muted);">Confirme o check-in na atividade exibida pelo professor no projetor da sala.</p>
+                </div>
+                <button class="modal-close" onclick="closeModal('modal-scanner')">
+                    <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-content">
+                <div style="background:var(--bg-subtle); padding:16px; border-radius:var(--radius-lg); border:1px solid var(--border); margin-bottom:16px;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                        <svg class="icon" viewBox="0 0 24 24" style="color:var(--accent);"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        <span style="font-weight:700; font-size:14px;">Validador de Presença Presencial</span>
+                    </div>
+                    <p style="font-size:12.5px; color:var(--text-body); line-height:1.5;">
+                        Selecione a atividade em andamento na sua sala e confirme o token exibido no datashow do docente:
+                    </p>
+                </div>
+
+                <label class="form-label">Atividade que você está assistindo:</label>
+                <select class="form-select" id="student-scan-act" onchange="syncStudentToken()">
+                    <!-- INJECTED -->
+                </select>
+
+                <label class="form-label">Token Criptográfico Capturado do Telão:</label>
+                <input type="text" class="form-input mono" id="student-token-input" placeholder="Aguardando token do telão...">
+
+                <button class="btn-action btn-accent" style="width:100%; justify-content:center; padding:10px;" onclick="submitStudentAttendance()">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>Confirmar Meu Check-in Presencial</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: PERFIL DO USUÁRIO -->
+    <div class="modal-overlay" id="modal-profile">
+        <div class="modal-box">
+            <div class="modal-head">
+                <h3 style="font-size:17px; font-weight:700;">Perfil Acadêmico</h3>
+                <button class="modal-close" onclick="closeModal('modal-profile')">
+                    <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-content">
+                <div style="display:flex; align-items:center; gap:14px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border);">
+                    <div class="user-avatar" id="modal-avatar" style="width:48px; height:48px; font-size:18px;">GB</div>
+                    <div>
+                        <div style="font-size:16px; font-weight:700;" id="modal-user-name">Guilherme Barbosa</div>
+                        <div style="font-size:13px; color:var(--text-muted);" id="modal-user-email">guilherme.barbosa@aluno.edu.br</div>
+                        <span class="tag-pill blue" id="modal-user-role" style="margin-top:6px;">Participante</span>
+                    </div>
+                </div>
+
+                <label class="form-label">Atualizar Nome de Exibição:</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" class="form-input" id="profile-name-input" value="Guilherme Barbosa" style="margin-bottom:0;">
+                    <button class="btn-action btn-secondary" onclick="saveProfileName()">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: FEEDBACK DE ATIVIDADE -->
+    <div class="modal-overlay" id="modal-feedback">
+        <div class="modal-box">
+            <div class="modal-head">
+                <h3 style="font-size:17px; font-weight:700;">Avaliação & Feedback Pedagógico</h3>
+                <button class="modal-close" onclick="closeModal('modal-feedback')">
+                    <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-content">
+                <label class="form-label">Como você avalia a clareza técnica da atividade?</label>
+                <select class="form-select" id="feedback-score">
+                    <option value="5">Excelente (5 estrelas)</option>
+                    <option value="4">Muito Bom (4 estrelas)</option>
+                    <option value="3">Regular (3 estrelas)</option>
+                    <option value="2">Insatisfatório (2 estrelas)</option>
+                    <option value="1">Ruim (1 estrela)</option>
+                </select>
+
+                <label class="form-label">Comentários e Sugestões para o Docente:</label>
+                <textarea class="form-textarea" id="feedback-text" rows="3" placeholder="Gostei muito da explicação sobre o padrão Strategy e encapsulamento de invariantes..."></textarea>
+
+                <button class="btn-action btn-primary" style="width:100%; justify-content:center;" onclick="submitFeedback()">
+                    Enviar Avaliação
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // GLOBAL STATE
+        let activeUser = {
+            id: 5,
+            name: "Guilherme Barbosa",
+            email: "guilherme.barbosa@aluno.edu.br",
+            role: "PARTICIPANT"
+        };
+        let allEvents = [];
+        let currentEventId = 1;
+        let eventData = null;
+        let activities = [];
+        let userRegs = [];
+        let currentProjectorToken = "";
+
+        // DATE PARSER
+        function parseDate(d) {
+            if (!d) return null;
+            if (Array.isArray(d)) {
+                return new Date(d[0], d[1] - 1, d[2], d[3] || 0, d[4] || 0);
+            }
+            return new Date(d);
+        }
+
+        function formatTime(d) {
+            const dt = parseDate(d);
+            if (!dt || isNaN(dt.getTime())) return "--:--";
+            return dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatDatePill(period) {
+            if (!period || !period.start) return "25 SET";
+            const dt = parseDate(period.start);
+            if (!dt || isNaN(dt.getTime())) return "25 SET";
+            const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+            return `${dt.getDate()} ${months[dt.getMonth()]}`;
+        }
+
+        function formatTypeName(t) {
+            const map = {
+                'LECTURE': 'Palestra Magna',
+                'WORKSHOP': 'Workshop Prático',
+                'ORAL_PRESENTATION': 'Sessão Técnica / Banca'
+            };
+            return map[t] || t;
+        }
+
+        // INIT
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadEventsList();
+            await loadData();
+            updateUI();
+
+            // Click outside to close account switcher dropdown
+            document.addEventListener('click', (e) => {
+                const dropdown = document.getElementById('account-dropdown');
+                const trigger = document.getElementById('user-pill-trigger');
+                if (dropdown && trigger && !dropdown.contains(e.target) && !trigger.contains(e.target)) {
+                    dropdown.classList.remove('open');
+                    trigger.classList.remove('active');
+                }
+            });
+        });
+
+        // ACCOUNT DROPDOWN TOGGLE
+        function toggleAccountDropdown() {
+            const dropdown = document.getElementById('account-dropdown');
+            const trigger = document.getElementById('user-pill-trigger');
+            dropdown.classList.toggle('open');
+            trigger.classList.toggle('active');
+        }
+
+        function selectPersonaDropdown(id, name, role) {
+            activeUser.id = id;
+            activeUser.name = name;
+            activeUser.role = role;
+            activeUser.email = id <= 4 ? 
+                `${name.toLowerCase().replace('prof. ', '').replace('profa. ', '').replace(' ', '.')}@universidade.edu.br` : 
+                `${name.toLowerCase().replace(' ', '.')}@aluno.edu.br`;
+
+            // Update selected check in dropdown
+            document.querySelectorAll('.account-option-item').forEach(item => item.classList.remove('selected'));
+            const opt = document.getElementById(`opt-user-${id}`);
+            if (opt) opt.classList.add('selected');
+
+            toggleAccountDropdown();
+
+            loadData().then(() => updateUI());
+        }
+
+        async function loadEventsList() {
+            try {
+                const res = await fetch('/api/events');
+                if (res.ok) {
+                    allEvents = await res.json();
+                    const dropdown = document.getElementById('global-event-select');
+                    const projEventSelect = document.getElementById('projector-event-select');
+                    dropdown.innerHTML = allEvents.map(e => `<option value="${e.id}">${e.title}</option>`).join('');
+                    projEventSelect.innerHTML = allEvents.map(e => `<option value="${e.id}">${e.title}</option>`).join('');
+                }
+            } catch (err) {
+                console.error("Erro ao listar eventos:", err);
+            }
+        }
+
+        async function onEventSelectChange() {
+            currentEventId = parseInt(document.getElementById('global-event-select').value);
+            document.getElementById('projector-event-select').value = currentEventId;
+            await loadData();
+            updateUI();
+        }
+
+        async function onProjectorEventChange() {
+            const evId = parseInt(document.getElementById('projector-event-select').value);
+            currentEventId = evId;
+            document.getElementById('global-event-select').value = evId;
+            await loadData();
+            updateUI();
+            populateActivitySelectors();
+            generateProjectorToken();
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch(`/api/events/${currentEventId}`);
+                if (res.ok) {
+                    eventData = await res.json();
+                    activities = eventData.activities || [];
+                }
+                const regRes = await fetch(`/api/registrations/user/${activeUser.id}`);
+                if (regRes.ok) {
+                    userRegs = await regRes.json();
+                }
+            } catch (err) {
+                console.error("Erro ao carregar dados:", err);
+            }
+            populateActivitySelectors();
+        }
+
+        function populateActivitySelectors() {
+            const projActSelect = document.getElementById('projector-act-select');
+            const studentScanSelect = document.getElementById('student-scan-act');
+            const manualActSelect = document.getElementById('adm-manual-aid');
+
+            const options = activities.map(a => `<option value="${a.id}">Atividade ${a.id}: ${a.title}</option>`).join('');
+            projActSelect.innerHTML = options || '<option value="1">Nenhuma atividade</option>';
+            studentScanSelect.innerHTML = options || '<option value="1">Nenhuma atividade</option>';
+            if (manualActSelect) manualActSelect.innerHTML = options || '<option value="1">Nenhuma atividade</option>';
+        }
+
+        function updateUI() {
+            renderActivities();
+            renderAgenda();
+            renderCertificates();
+            updateSidebarAndRole();
+        }
+
+        function updateSidebarAndRole() {
+            document.getElementById('sb-user-name').textContent = activeUser.name;
+            document.getElementById('sb-user-role').textContent = activeUser.role === 'ADMIN' ? 'Administrador' : (activeUser.role === 'ORGANIZER' ? 'Organizador (Docente)' : 'Discente');
+            const initials = activeUser.name.split(' ').map(n => n[0]).slice(0, 2).join('');
+            document.getElementById('sb-user-avatar').textContent = initials;
+            document.getElementById('modal-avatar').textContent = initials;
+            document.getElementById('modal-user-name').textContent = activeUser.name;
+            document.getElementById('modal-user-email').textContent = activeUser.email;
+            document.getElementById('modal-user-role').textContent = activeUser.role;
+
+            const isTeacher = activeUser.role === 'ORGANIZER' || activeUser.role === 'ADMIN';
+            document.getElementById('widget-teacher-box').style.display = isTeacher ? 'block' : 'none';
+            document.getElementById('docente-section-title').style.display = isTeacher ? 'block' : 'none';
+            document.getElementById('nav-admin').style.display = isTeacher ? 'flex' : 'none';
+
+            if (isTeacher) {
+                document.getElementById('nav-terminal-label').textContent = "Projetar QR Code da Aula";
+                document.getElementById('topbar-terminal-btn-label').textContent = "Projetar QR Code";
+            } else {
+                document.getElementById('nav-terminal-label').textContent = "Registrar Presença";
+                document.getElementById('topbar-terminal-btn-label').textContent = "Registrar Presença";
+            }
+        }
+
+        // CLEAR FILTERS BUTTON ACTION
+        function clearFilters() {
+            document.getElementById('filter-search').value = '';
+            document.getElementById('filter-track').value = '';
+            document.getElementById('filter-type').value = '';
+            renderActivities();
+        }
+
+        // RENDER ACTIVITIES
+        function renderActivities() {
+            const listWrap = document.getElementById('activities-list-wrap');
+            const search = (document.getElementById('filter-search').value || '').toLowerCase();
+            const track = document.getElementById('filter-track').value;
+            const type = document.getElementById('filter-type').value;
+
+            const hasActiveFilters = Boolean(search || track || type);
+            document.getElementById('btn-clear-filters').style.display = hasActiveFilters ? 'inline-flex' : 'none';
+
+            const reg = userRegs.find(r => r.eventId === currentEventId);
+            const selectedIds = reg ? (reg.selectedActivityIds || []) : [];
+            const isTeacher = activeUser.role === 'ORGANIZER' || activeUser.role === 'ADMIN';
+
+            const filtered = activities.filter(a => {
+                const matchSearch = !search || a.title.toLowerCase().includes(search) || a.description.toLowerCase().includes(search);
+                const matchTrack = !track || (a.location && a.location.spaceOrTrack && a.location.spaceOrTrack.includes(track));
+                const matchType = !type || a.type === type;
+                return matchSearch && matchTrack && matchType;
+            });
+
+            document.getElementById('activities-count-text').textContent = `${filtered.length} atividade(s)`;
+
+            if (filtered.length === 0) {
+                listWrap.innerHTML = `
+                    <div class="empty-filter-state">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24" style="color:var(--text-light); margin-bottom:12px;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <h4 style="font-size:15px; font-weight:700; color:var(--text-heading); margin-bottom:6px;">Nenhuma atividade encontrada com os filtros selecionados</h4>
+                        <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Tente remover o filtro de trilha ou formato para ver a grade completa.</p>
+                        <button class="btn-action btn-primary" onclick="clearFilters()">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            <span>Limpar Todos os Filtros</span>
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            listWrap.innerHTML = filtered.map(a => {
+                const isSelected = selectedIds.includes(a.id);
+                const start = formatTime(a.period ? a.period.start : null);
+                const end = formatTime(a.period ? a.period.end : null);
+                const datePill = formatDatePill(a.period);
+                const room = a.location ? a.location.room : 'Auditório';
+                const trackName = a.location ? (a.location.spaceOrTrack || 'Geral') : 'Geral';
+                const typeName = formatTypeName(a.type);
+                const policyName = a.attendancePolicy ? (a.attendancePolicy.policyName || 'Check-in Único') : 'Check-in Único';
+
+                const speakersHtml = (a.speakers || []).map(s => `
+                    <span><strong>${s.name}</strong> (${s.roleInActivity || 'Docente'})</span>
+                `).join(' • ');
+
+                let actionButtonHtml = '';
+                if (isTeacher) {
+                    actionButtonHtml = `
+                        <button class="btn-action btn-accent" style="font-size:12px; padding:6px 12px;" onclick="quickProjectActivity(${a.id})" title="Abrir projeção do QR Code em tela cheia">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                            <span>Projetar QR</span>
+                        </button>
+                    `;
+                } else {
+                    actionButtonHtml = isSelected ? `
+                        <button class="btn-action btn-secondary" style="color:var(--success-fg); border-color:var(--success-border); background:var(--success-subtle);" onclick="removeFromAgenda(${a.id})">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <span>Na Minha Agenda</span>
+                        </button>
+                    ` : `
+                        <button class="btn-action btn-secondary" onclick="addToAgenda(${a.id})">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            <span>Adicionar</span>
+                        </button>
+                    `;
+                }
+
+                return `
+                    <div class="act-card">
+                        <div class="act-time-col">
+                            <span class="act-date-pill">${datePill}</span>
+                            <span class="act-time-val mono">${start} - ${end}</span>
+                            <span class="act-room-val">
+                                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                ${room}
+                            </span>
+                        </div>
+
+                        <div class="act-body-col">
+                            <div class="act-tags">
+                                <span class="tag-pill blue">${trackName}</span>
+                                <span class="tag-pill">${typeName}</span>
+                                <span class="tag-pill">${policyName}</span>
+                            </div>
+
+                            <h3 class="act-title">${a.title}</h3>
+                            <p class="act-desc">${a.description}</p>
+
+                            <div class="act-speakers">
+                                <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:var(--accent);"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+                                <div>${speakersHtml}</div>
+                            </div>
+                        </div>
+
+                        <div class="act-action-col">
+                            <span class="capacity-val mono">${a.currentEnrollments || 0} / ${a.maxCapacity} vagas</span>
+                            ${actionButtonHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            updateWidgetAgenda();
+        }
+
+        // AGENDA RENDER
+        function renderAgenda() {
+            const wrap = document.getElementById('agenda-list-wrap');
+            const reg = userRegs.find(r => r.eventId === currentEventId);
+            const selectedIds = reg ? (reg.selectedActivityIds || []) : [];
+            const myActs = activities.filter(a => selectedIds.includes(a.id));
+
+            document.getElementById('sidebar-agenda-badge').textContent = myActs.length;
+            document.getElementById('widget-agenda-badge').textContent = `${myActs.length} ativ.`;
+
+            if (myActs.length === 0) {
+                wrap.innerHTML = '<div style="background:#ffffff; padding:32px; text-align:center; border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--text-muted);">Sua agenda está vazia no momento. Adicione atividades na programação!</div>';
+                return;
+            }
+
+            wrap.innerHTML = myActs.map(a => {
+                const start = formatTime(a.period ? a.period.start : null);
+                const end = formatTime(a.period ? a.period.end : null);
+                const datePill = formatDatePill(a.period);
+                const room = a.location ? a.location.room : 'Auditório';
+
+                return `
+                    <div class="act-card" style="border-left: 4px solid var(--accent);">
+                        <div class="act-time-col">
+                            <span class="act-date-pill">${datePill}</span>
+                            <span class="act-time-val mono">${start} - ${end}</span>
+                            <span class="act-room-val">${room}</span>
+                        </div>
+                        <div class="act-body-col">
+                            <h3 class="act-title">${a.title}</h3>
+                            <p class="act-desc">${a.description}</p>
+                        </div>
+                        <div class="act-action-col">
+                            <button class="btn-action btn-secondary" style="color:var(--danger); border-color:var(--danger-border);" onclick="removeFromAgenda(${a.id})">
+                                Remover
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateWidgetAgenda() {
+            const container = document.getElementById('widget-agenda-items');
+            const reg = userRegs.find(r => r.eventId === currentEventId);
+            const selectedIds = reg ? (reg.selectedActivityIds || []) : [];
+            const myActs = activities.filter(a => selectedIds.includes(a.id));
+
+            if (myActs.length === 0) {
+                container.innerHTML = '<span style="font-size:12px; color:var(--text-muted);">Nenhuma atividade adicionada.</span>';
+                return;
+            }
+
+            container.innerHTML = myActs.slice(0, 3).map(a => `
+                <div style="font-size:12px; padding:6px 10px; background:var(--bg-subtle); border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; justify-content:space-between;">
+                    <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${a.title}</span>
+                    <span class="mono" style="color:var(--accent); font-weight:600;">${formatTime(a.period ? a.period.start : null)}</span>
+                </div>
+            `).join('');
+        }
+
+        // ACTIONS: AGENDA
+        async function addToAgenda(actId) {
+            try {
+                const res = await fetch(`/api/registrations/${currentEventId}/activities/${actId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: activeUser.id })
+                });
+                if (res.ok) {
+                    await loadData();
+                    updateUI();
+                } else {
+                    const err = await res.json();
+                    alert("Aviso de Conflito/Inscrição: " + (err.error || "Não foi possível adicionar."));
+                }
+            } catch (err) {
+                alert("Erro ao adicionar atividade.");
+            }
+        }
+
+        async function removeFromAgenda(actId) {
+            try {
+                const res = await fetch(`/api/registrations/${currentEventId}/activities/${actId}?userId=${activeUser.id}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    await loadData();
+                    updateUI();
+                }
+            } catch (err) {
+                alert("Erro ao remover atividade.");
+            }
+        }
+
+        // ATTENDANCE HANDLING
+        function handleAttendanceClick() {
+            const isTeacher = activeUser.role === 'ORGANIZER' || activeUser.role === 'ADMIN';
+            if (isTeacher) {
+                openTeacherProjectorModal();
+            } else {
+                openStudentScannerModal();
+            }
+        }
+
+        function quickProjectActivity(actId) {
+            document.getElementById('projector-act-select').value = actId;
+            openTeacherProjectorModal();
+        }
+
+        async function openTeacherProjectorModal() {
+            document.getElementById('modal-projector').classList.add('active');
+            generateProjectorToken();
+        }
+
+        async function generateProjectorToken() {
+            const actId = document.getElementById('projector-act-select').value;
+            const act = activities.find(a => a.id == actId);
+            if (act) {
+                document.getElementById('projector-act-title').textContent = act.title;
+            }
+            try {
+                const res = await fetch(`/api/attendance/qr/generate/${actId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    currentProjectorToken = data.token;
+                    document.getElementById('projector-token-text').textContent = `Token: ${data.token}`;
+                    document.getElementById('projector-qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.token)}`;
+                }
+            } catch (err) {
+                console.error("Erro ao gerar QR Token do docente:", err);
+            }
+        }
+
+        function openStudentScannerModal() {
+            document.getElementById('modal-scanner').classList.add('active');
+            syncStudentToken();
+        }
+
+        function syncStudentToken() {
+            if (currentProjectorToken) {
+                document.getElementById('student-token-input').value = currentProjectorToken;
+            } else {
+                const actId = document.getElementById('student-scan-act').value;
+                fetch(`/api/attendance/qr/generate/${actId}`).then(r => r.json()).then(d => {
+                    document.getElementById('student-token-input').value = d.token;
+                }).catch(() => {});
+            }
+        }
+
+        async function submitStudentAttendance() {
+            const actId = document.getElementById('student-scan-act').value;
+            const token = document.getElementById('student-token-input').value.trim();
+            if (!token) {
+                alert("Token de presença não encontrado no projetor.");
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/attendance/qr/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        qrToken: token,
+                        userId: activeUser.id,
+                        activityId: parseInt(actId),
+                        type: 'CHECK_IN'
+                    })
+                });
+                if (res.ok) {
+                    alert("Presença confirmada com sucesso pelo sistema!");
+                    closeModal('modal-scanner');
+                } else {
+                    const err = await res.json();
+                    alert("Validação de Presença: " + (err.error || "Erro no check-in."));
+                }
+            } catch (err) {
+                alert("Erro ao validar presença.");
+            }
+        }
+
+        async function submitManualAttendance() {
+            const uid = document.getElementById('adm-manual-uid').value;
+            const aid = document.getElementById('adm-manual-aid').value;
+            const just = document.getElementById('adm-manual-just').value;
+
+            try {
+                const res = await fetch('/api/attendance/manual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: parseInt(uid),
+                        activityId: parseInt(aid),
+                        organizerId: activeUser.id,
+                        justification: just
+                    })
+                });
+                if (res.ok) {
+                    alert("Presença manual homologada pelo professor no diário de classe!");
+                } else {
+                    const err = await res.json();
+                    alert("Erro: " + (err.error || "Falha na chamada manual."));
+                }
+            } catch (err) {
+                alert("Erro de conexão na chamada manual.");
+            }
+        }
+
+        // CERTIFICATES
+        async function issueCertificate() {
+            try {
+                const res = await fetch(`/api/certificates/issue/${currentEventId}/${activeUser.id}`, { method: 'POST' });
+                if (res.ok) {
+                    alert("Certificado emitido e assinado digitalmente!");
+                    renderCertificates();
+                } else {
+                    const err = await res.json();
+                    alert("Elegibilidade: " + (err.error || "Carga horária mínima não atingida."));
+                }
+            } catch (err) {
+                alert("Erro ao processar certificado.");
+            }
+        }
+
+        async function renderCertificates() {
+            const wrap = document.getElementById('cert-list-wrap');
+            try {
+                const res = await fetch(`/api/certificates/user/${activeUser.id}`);
+                if (res.ok) {
+                    const certs = await res.json();
+                    if (certs.length === 0) {
+                        wrap.innerHTML = '<span style="font-size:13px; color:var(--text-muted);">Nenhum certificado emitido para este participante ainda.</span>';
+                        return;
+                    }
+                    wrap.innerHTML = certs.map(c => `
+                        <div class="cert-card">
+                            <div class="cert-title">${c.eventTitle}</div>
+                            <p style="font-size:13px; color:var(--text-body); margin-top:4px;">
+                                Participante: <strong>${activeUser.name}</strong> • Carga Horária: <strong>${c.workloadHours} horas</strong>
+                            </p>
+                            <div class="cert-code mono">Autenticidade: ${c.verificationCode}</div>
+                            <div style="margin-top:12px;">
+                                <a href="/api/certificates/download/${c.id}" class="btn-action btn-primary" style="font-size:12px; padding:6px 12px;" download>
+                                    Baixar PDF Oficial
+                                </a>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error("Erro ao listar certificados:", err);
+            }
+        }
+
+        async function verifyCertificate() {
+            const code = document.getElementById('cert-code-input').value.trim();
+            const resWrap = document.getElementById('cert-verify-result');
+            if (!code) return;
+
+            try {
+                const res = await fetch(`/api/certificates/verify/${code}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    resWrap.innerHTML = `
+                        <div style="background:var(--success-subtle); border:1px solid var(--success-border); padding:12px; border-radius:var(--radius-md);">
+                            <div style="color:var(--success-fg); font-weight:700; font-size:13px;">Certificado Autêntico e Válido</div>
+                            <div style="font-size:12px; color:var(--text-body); margin-top:4px;">
+                                Titular: <strong>${data.participantName}</strong> • Evento: <strong>${data.eventTitle}</strong> (${data.workloadHours}h)
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resWrap.innerHTML = `
+                        <div style="background:var(--danger-subtle); border:1px solid var(--danger-border); padding:12px; border-radius:var(--radius-md);">
+                            <div style="color:var(--danger-fg); font-weight:700; font-size:13px;">Código Inválido ou Não Localizado</div>
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                alert("Erro ao validar código.");
+            }
+        }
+
+        // CREATE ADMIN ACTIVITY
+        async function createAdminActivity() {
+            const title = document.getElementById('adm-title').value.trim();
+            const desc = document.getElementById('adm-desc').value.trim();
+            const room = document.getElementById('adm-room').value.trim();
+            const track = document.getElementById('adm-track').value.trim();
+            const start = document.getElementById('adm-start').value;
+            const end = document.getElementById('adm-end').value;
+            const cap = parseInt(document.getElementById('adm-cap').value);
+            const type = document.getElementById('adm-type').value;
+
+            if (!title) { alert("Informe o título da atividade."); return; }
+
+            try {
+                const res = await fetch(`/api/events/${currentEventId}/activities`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: title,
+                        description: desc,
+                        room: room,
+                        spaceOrTrack: track,
+                        startTime: start + ':00',
+                        endTime: end + ':00',
+                        capacity: cap,
+                        type: type,
+                        attendancePolicyKey: 'SINGLE_CHECKIN'
+                    })
+                });
+                if (res.ok) {
+                    alert("Atividade salva com sucesso! (Nenhum conflito de sala detectado)");
+                    await loadData();
+                    updateUI();
+                    showTab('prog');
+                } else {
+                    const err = await res.json();
+                    alert("Erro de Validação de Conflito: " + (err.error || "Choque de sala ou horário detectado."));
+                }
+            } catch (err) {
+                alert("Erro ao criar atividade.");
+            }
+        }
+
+        // TAB SWITCHING
+        function showTab(t) {
+            const tabs = ['prog', 'agenda', 'cert', 'admin'];
+            tabs.forEach(tab => {
+                const el = document.getElementById(`tab-${tab}`);
+                const nav = document.getElementById(`nav-${tab}`);
+                if (el) el.style.display = (tab === t) ? 'block' : 'none';
+                if (nav) {
+                    if (tab === t) nav.classList.add('active');
+                    else nav.classList.remove('active');
+                }
+            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // MODALS
+        function openProfileModal() { document.getElementById('modal-profile').classList.add('active'); }
+        function openFeedbackModal() { document.getElementById('modal-feedback').classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        function saveProfileName() {
+            const newName = document.getElementById('profile-name-input').value.trim();
+            if (newName) {
+                activeUser.name = newName;
+                updateSidebarAndRole();
+                alert("Nome atualizado com sucesso!");
+                closeModal('modal-profile');
+            }
+        }
+
+        function submitFeedback() {
+            alert("Feedback enviado com sucesso!");
+            closeModal('modal-feedback');
+        }
+    </script>
+</body>
+</html>

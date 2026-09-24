@@ -1,82 +1,80 @@
 package com.eventos.domain;
 
-import org.junit.jupiter.api.BeforeEach;
+import com.eventos.domain.exceptions.BusinessRuleException;
+import com.eventos.domain.exceptions.ConflictException;
+import com.eventos.domain.model.Activity;
+import com.eventos.domain.model.ActivityLocation;
+import com.eventos.domain.model.ActivityType;
+import com.eventos.domain.model.Event;
+import com.eventos.domain.model.EventStatus;
+import com.eventos.domain.model.Period;
+import com.eventos.domain.policies.MinimumAttendancePercentagePolicy;
+import com.eventos.domain.policies.SingleCheckInPolicy;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@DisplayName("Testes de Domínio: Agregado Event")
 public class EventTest {
 
-    private Event event;
-    private LocalDateTime eventStart;
-    private LocalDateTime eventEnd;
+    @Test
+    @DisplayName("Não deve permitir publicar evento sem atividades cadastradas")
+    void shouldNotPublishWithoutActivities() {
+        Period period = new Period(LocalDateTime.of(2026, 9, 25, 8, 0), LocalDateTime.of(2026, 9, 27, 18, 0));
+        Event event = new Event(1L, "Congresso", "Desc", period, EventStatus.DRAFT, 1L, null, 200, new MinimumAttendancePercentagePolicy(75.0));
 
-    @BeforeEach
-    public void setUp() {
-        eventStart = LocalDateTime.of(2026, 9, 1, 9, 0);
-        eventEnd = LocalDateTime.of(2026, 9, 5, 18, 0);
-        event = new Event(1L, "Congresso de POO II", "Simpósio de teste", eventStart, eventEnd);
+        assertThrows(BusinessRuleException.class, event::publish);
+        assertEquals(EventStatus.DRAFT, event.getStatus());
     }
 
     @Test
-    public void testAddActivitySuccessfully() {
-        Activity activity = new Activity(1L, "Palestra de SOLID", "Princípios SOLID em Java", "PALESTRA",
-                eventStart.plusHours(2), eventStart.plusHours(4), "Auditório A", 100);
+    @DisplayName("Deve publicar evento quando contiver ao menos uma atividade")
+    void shouldPublishWithActivities() {
+        Period eventPeriod = new Period(LocalDateTime.of(2026, 9, 25, 8, 0), LocalDateTime.of(2026, 9, 27, 18, 0));
+        Event event = new Event(1L, "Congresso", "Desc", eventPeriod, EventStatus.DRAFT, 1L, null, 200, new MinimumAttendancePercentagePolicy(75.0));
+
+        Period actPeriod = new Period(LocalDateTime.of(2026, 9, 25, 9, 0), LocalDateTime.of(2026, 9, 25, 11, 0));
+        Activity activity = new Activity(1L, 1L, "Abertura", "Desc", actPeriod,
+                new ActivityLocation("Auditório", "Geral", 100), ActivityType.LECTURE, 100, 0, null, new SingleCheckInPolicy(), false);
 
         event.addActivity(activity);
-        
-        assertEquals(1, event.getActivities().size());
-        assertEquals("Palestra de SOLID", event.getActivities().get(0).getTitle());
+        event.publish();
+
+        assertEquals(EventStatus.PUBLISHED, event.getStatus());
+        assertTrue(event.isEnrollmentOpen());
     }
 
     @Test
-    public void testAddActivityOutsideEventTimelineShouldThrow() {
-        // Activity starts before the event starts
-        Activity earlyActivity = new Activity(1L, "Acredenciamento", "Credenciamento de participantes", "ORGANIZACAO",
-                eventStart.minusHours(2), eventStart.plusHours(1), "Foyer", 500);
+    @DisplayName("Deve rejeitar atividade fora do período do evento")
+    void shouldRejectActivityOutsideEventPeriod() {
+        Period eventPeriod = new Period(LocalDateTime.of(2026, 9, 25, 8, 0), LocalDateTime.of(2026, 9, 27, 18, 0));
+        Event event = new Event(1L, "Congresso", "Desc", eventPeriod, EventStatus.DRAFT, 1L, null, 200, null);
 
-        Exception exception = assertThrows(IllegalArgumentException.class, () -> {
-            event.addActivity(earlyActivity);
-        });
+        // Atividade para a semana seguinte
+        Period actPeriod = new Period(LocalDateTime.of(2026, 10, 5, 9, 0), LocalDateTime.of(2026, 10, 5, 11, 0));
+        Activity activity = new Activity(1L, 1L, "Extra", "Desc", actPeriod,
+                new ActivityLocation("Auditório", "Geral", 100), ActivityType.LECTURE, 100, 0, null, new SingleCheckInPolicy(), false);
 
-        assertTrue(exception.getMessage().contains("período do evento"));
+        assertThrows(BusinessRuleException.class, () -> event.addActivity(activity));
     }
 
     @Test
-    public void testAddConflictingActivityLocationShouldThrow() {
-        // First activity in Auditorium A
-        Activity act1 = new Activity(1L, "Palestra de SOLID", "Princípios SOLID em Java", "PALESTRA",
-                eventStart.plusHours(2), eventStart.plusHours(4), "Auditório A", 100);
-        event.addActivity(act1);
+    @DisplayName("Deve rejeitar atividades com conflito de mesma sala e horário sobreposto")
+    void shouldRejectConflictingRoomActivities() {
+        Period eventPeriod = new Period(LocalDateTime.of(2026, 9, 25, 8, 0), LocalDateTime.of(2026, 9, 27, 18, 0));
+        Event event = new Event(1L, "Congresso", "Desc", eventPeriod, EventStatus.DRAFT, 1L, null, 200, null);
 
-        // Second activity in Auditorium A at the same time
-        Activity act2 = new Activity(2L, "Workshop de Kotlin", "Hands-on Kotlin", "WORKSHOP",
-                eventStart.plusHours(3), eventStart.plusHours(5), "Auditório A", 50);
+        Period p1 = new Period(LocalDateTime.of(2026, 9, 25, 9, 0), LocalDateTime.of(2026, 9, 25, 11, 0));
+        Activity a1 = new Activity(1L, 1L, "Palestra 1", "Desc", p1,
+                new ActivityLocation("Sala 101", "Geral", 50), ActivityType.LECTURE, 50, 0, null, new SingleCheckInPolicy(), false);
+        event.addActivity(a1);
 
-        Exception exception = assertThrows(IllegalStateException.class, () -> {
-            event.addActivity(act2);
-        });
+        Period p2 = new Period(LocalDateTime.of(2026, 9, 25, 10, 0), LocalDateTime.of(2026, 9, 25, 12, 0));
+        Activity a2 = new Activity(2L, 1L, "Palestra 2", "Desc", p2,
+                new ActivityLocation("Sala 101", "Geral", 50), ActivityType.LECTURE, 50, 0, null, new SingleCheckInPolicy(), false);
 
-        assertTrue(exception.getMessage().contains("Conflito de agendamento"));
-    }
-
-    @Test
-    public void testAddNonConflictingActivityDifferentLocationSuccessfully() {
-        // First activity in Auditorium A
-        Activity act1 = new Activity(1L, "Palestra de SOLID", "Princípios SOLID em Java", "PALESTRA",
-                eventStart.plusHours(2), eventStart.plusHours(4), "Auditório A", 100);
-        event.addActivity(act1);
-
-        // Second activity at the same time but in Auditorium B
-        Activity act2 = new Activity(2L, "Workshop de Kotlin", "Hands-on Kotlin", "WORKSHOP",
-                eventStart.plusHours(2), eventStart.plusHours(4), "Auditório B", 50);
-        
-        assertDoesNotThrow(() -> {
-            event.addActivity(act2);
-        });
-        
-        assertEquals(2, event.getActivities().size());
+        assertThrows(ConflictException.class, () -> event.addActivity(a2));
     }
 }
