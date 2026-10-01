@@ -47,14 +47,24 @@ public class EventServiceImpl implements EventUseCase {
     }
 
     @Override
+    public Event finishEvent(Long eventId) {
+        Event event = getEvent(eventId);
+        event.finish();
+        return eventRepository.save(event);
+    }
+
+    @Override
     public Event getEvent(Long id) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Evento com ID " + id + " não encontrado."));
         List<Activity> activities = activityRepository.findByEventId(id);
         // Retorna evento carregado com atividades
-        return new Event(event.getId(), event.getTitle(), event.getDescription(),
+        Event loaded = new Event(event.getId(), event.getTitle(), event.getDescription(),
                 event.getPeriod(), event.getStatus(), event.getOrganizerId(),
                 activities, event.getMaxCapacity(), event.getCertificateEligibilityPolicy());
+        loaded.configureRegistration(event.isActivitySelectionEnabled(), event.isActivitySelectionRequired(),
+                event.getRegistrationDeadline(), event.getTimeZone());
+        return loaded;
     }
 
     @Override

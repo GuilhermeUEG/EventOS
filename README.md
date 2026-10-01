@@ -1,7 +1,7 @@
 # EventOS — Plataforma Integrada de Gestão de Eventos
 **Disciplina:** Programação Orientada a Objetos II (POO II)  
-**Projeto Integrador Acadêmico** — Versão Final Concluída com Maestria  
-**Stack Tecnológica:** Java 21+ Puro (sem Spring Boot), Javalin 6.x (REST API), Java Swing (Desktop Admin), OpenPDF (Relatórios & Certificados), H2 Database (JDBC Relacional), JUnit 5.
+**Projeto Integrador Acadêmico**
+**Stack Tecnológica:** Java 21, Gradle, Javalin 6.x, Java Swing, OpenPDF, H2/JDBC, HTML/CSS/JavaScript e JUnit 5.
 
 ---
 
@@ -10,8 +10,8 @@
 O **EventOS** foi construído estritamente sob os princípios de **Clean Architecture / Arquitetura Hexagonal (Ports & Adapters)**, blindando o modelo de domínio de quaisquer dependências de frameworks, interfaces ou bancos de dados.
 
 ```
-       [ Site Público Web / REST API ]         [ Painel Administrativo Desktop Swing ]
-                  │ (HTTP / JSON)                             │ (Java Swing EDT)
+       [ Site Público Web ]                    [ Painel Administrativo Desktop Swing ]
+                  │ (HTTP / JSON)                             │ (HTTP / JSON)
                   ▼                                           ▼
          ┌─────────────────────────────────────────────────────────────┐
          │             ADAPTADORES DE ENTRADA (Input Adapters)         │
@@ -43,7 +43,7 @@ O **EventOS** foi construído estritamente sob os princípios de **Clean Archite
          ┌─────────────────────────────────────────────────────────────┐
          │             ADAPTADORES DE SAÍDA (Output Adapters)          │
          │  • Persistência: JdbcEventRepository, JdbcUserRepository... │
-         │  • Segurança: Sha256SecurityAdapter (Hash & QR Token)       │
+         │  • Segurança: PBKDF2 (senhas), HMAC (QR) e sessão opaca    │
          │  • Emissão de Documentos: OpenPdfGeneratorAdapter (OpenPDF) │
          └─────────────────────────────────────────────────────────────┘
                                         │
@@ -72,6 +72,10 @@ Ao iniciar:
 * A **API REST** e o **Site Público Integrado** estarão disponíveis em: **`http://localhost:7000`**
 * A **Interface Administrativa Swing** abrirá automaticamente em janela desktop gráfica local.
 
+Documentação complementar:
+* [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)
+* [`docs/API.md`](docs/API.md)
+
 ### 2.2. Executar a Suíte de Testes Automatizados (JUnit 5)
 ```bash
 .\gradlew.bat test
@@ -85,10 +89,10 @@ Para facilitar a avaliação diante do professor (Cenários CA-01 a CA-08), o si
 
 | Perfil | Nome | E-mail | Senha | Ações Permitidas |
 |---|---|---|---|---|
-| **Organizador** | Prof. Carlos Organizador | `organizador@eventos.com` | `org123` | Criar/Editar/Publicar Eventos, Gerenciar Salas, Lançar Presença Manual, Configurar Questionários e Exportar Relatórios. |
-| **Participante 1** | Lucas Silva | `lucas@eventos.com` | `lucas123` | Já inscrito no Simpósio com presença validada no Keynote (Apto para avaliar e solicitar certificado). |
-| **Participante 2** | Mariana Oliveira | `mariana@eventos.com` | `mari123` | Inscrita no Simpósio com presença pendente. |
-| **Administrador** | Administrador Geral | `admin@eventos.com` | `admin123` | Acesso total irrestrito a todos os eventos e usuários. |
+| **Organizador** | Prof. Marcio Giovane | `marcio.giovane@universidade.edu.br` | `marcio123` | Gestão do evento, frequência, questionários e relatórios. |
+| **Participante 1** | Guilherme Barbosa | `guilherme.barbosa@aluno.edu.br` | `gui123` | Inscrito e com presença de demonstração. |
+| **Participante 2** | Murilo Mendes | `murilo.mendes@aluno.edu.br` | `murilo123` | Participante inscrito. |
+| **Administrador** | Prof. Guiliano Rangel | `guiliano.rangel@universidade.edu.br` | `guiliano123` | Acesso administrativo. |
 
 *(Dica: A barra superior do site público conta com botões de 1 clique para alternar entre qualquer usuário de teste imediatamente!)*
 
@@ -98,7 +102,7 @@ Para facilitar a avaliação diante do professor (Cenários CA-01 a CA-08), o si
 
 | ID Requisito | ROO Relacionado | Responsabilidade / Implementação | Evidência / Teste / Demonstração | Status |
 |---|---|---|---|---|
-| **RF-01, RF-02** | ROO-01, ROO-03 | `User`, `Email` (Value Object), `AuthUseCase`, `Sha256SecurityAdapter` | Cadastro com hash SHA-256 e login com validação de credenciais | **Pronto** |
+| **RF-01, RF-02** | ROO-01, ROO-03 | `User`, `Email`, `AuthUseCase`, `Pbkdf2SecurityAdapter`, `SessionStore` | Cadastro, PBKDF2, sessão opaca e autorização server-side | **Pronto** |
 | **RF-03** | ROO-02 | `User.updateProfile()`, `AuthUseCase.updateProfile()` | Edição de dados do usuário preservando invariantes | **Pronto** |
 | **RF-04** | ROO-01, ROO-02 | `Event` (Agregado Raiz), `EventStatus`, `EventUseCase` | Ciclo de vida de eventos: Rascunho, Publicado, Cancelado, Encerrado | **Pronto** |
 | **RF-05, RF-06** | ROO-01, ROO-03 | `Activity`, `ActivityType`, `ActivityLocation` | Palestras, oficinas, pôsteres e trilhas configuráveis | **Pronto** |
@@ -110,7 +114,7 @@ Para facilitar a avaliação diante do professor (Cenários CA-01 a CA-08), o si
 | **RF-15** | ROO-02 | `Registration.cancel()`, `Activity.releaseSlot()` | Cancelamento com devolução automática de vaga | **Pronto** |
 | **RF-16, RF-17** | ROO-01, ROO-03 | `RegistrationUseCase.getParticipantAgenda()` | Agenda personalizada ordenada cronologicamente por horário | **Pronto** |
 | **RF-19, RF-23** | ROO-05, ROO-10 | `AttendancePolicy` (Strategy: `SingleCheckIn`, `CheckInCheckOut`, `ManualOnly`) | Cálculo polimórfico de situação de presença (Presente, Parcial, Ausente) | **Pronto** |
-| **RF-20, RF-21** | ROO-03, ROO-09 | `AttendanceUseCase.recordQrAttendance()`, `Sha256SecurityAdapter` | Token seguro de QR Code sem expor senhas/dados sensíveis (RN-10) | **Pronto** |
+| **RF-20, RF-21** | ROO-03, ROO-09 | `AttendanceUseCase.recordQrAttendance()`, `Pbkdf2SecurityAdapter` | Token HMAC temporário sem dados pessoais e check-in idempotente | **Pronto** |
 | **RF-22** | ROO-02, ROO-11 | `AttendanceUseCase.recordManualAttendance()`, `AttendanceRecord` | Lançamento manual com identificador do auditor e justificativa (RN-11, RN-12) | **Pronto** |
 | **RF-24, RF-25** | ROO-01, ROO-05 | `FeedbackSurvey`, `SurveyQuestion`, `QuestionType` | Questionários com validação polimórfica (Escala 1 a 5, Escolha Única, Texto) | **Pronto** |
 | **RF-26, RF-27** | ROO-02, ROO-11 | `SurveyUseCase.canUserEvaluate()`, `SurveyUseCase.submitResponse()` | Bloqueio de avaliação para não-inscritos ou ausentes e 1 resposta por usuário | **Pronto** |
@@ -144,15 +148,15 @@ Para facilitar a avaliação diante do professor (Cenários CA-01 a CA-08), o si
 
 ## 6. Registro de Decisões Arquiteturais (D-01 a D-08)
 
-* **D-01 (Interface Desktop):** Java Swing puro estruturado em abas com atualização reativa através dos Use Cases.
-* **D-02 (API REST & Autenticação):** Javalin 6.x embutido sob Jetty com serialização Jackson e autenticação sem estado com senhas em hash SHA-256 com salting.
+* **D-01 (Interface Desktop):** Java Swing estruturado em abas, atuando como cliente HTTP autenticado da mesma API consumida pelo site.
+* **D-02 (API REST & Autenticação):** Javalin 6.x/Jetty, Jackson, senhas PBKDF2 com salt aleatório e sessões opacas mantidas no servidor por oito horas. Operações protegidas validam perfil e titularidade no backend.
 * **D-03 (Banco Relacional & Migração):** H2 relacional com esquema DDL automático na inicialização e transações ACID gerenciadas via PreparedStatements.
 * **D-04 (Site Público):** Single Page Application em HTML5/CSS3/JavaScript moderna e responsiva servida diretamente pelo Javalin, comunicando-se exclusivamente via REST API.
-* **D-05 (Estratégia de QR Code):** Geração de payload seguro no formato `ACT_{id}_{timestamp}_{assinatura}` em Base64 URL-safe, garantindo integridade sem expor dados sensíveis do usuário (RN-10).
+* **D-05 (Estratégia de QR Code):** Payload `ACT_{id}_{timestamp}_{assinatura}` assinado por HMAC, Base64 URL-safe e validade de 15 minutos, sem dados pessoais.
 * **D-06 (Políticas Configuráveis):** Padrão *Strategy* aplicado a `AttendancePolicy` e `CertificateEligibilityPolicy`, permitindo variar os cálculos sem condicionais espalhadas pelo código.
 * **D-07 (Padrões de Projeto):**
   * *Strategy / Policy Pattern:* Variação de cálculo de presença e certificados.
   * *Domain Service / Specification Pattern:* `ConflictValidator` para isolar checagem de salas e horários.
   * *Adapter Pattern:* `OpenPdfGeneratorAdapter` e repositórios JDBC desacoplando bibliotecas externas do domínio.
   * *Factory Pattern:* `AttendancePolicyFactory` para instanciação limpa das políticas.
-* **D-08 (Testes e Qualidade):** Cobertura unitária abrangente com JUnit 5 para todas as invariantes e fluxo completo de integração hexagonal ponta a ponta.
+* **D-08 (Testes e Qualidade):** Testes JUnit 5 de domínio, segurança, sessões e fluxo integrado dos principais casos de uso. Execute com `.\gradlew.bat test`.

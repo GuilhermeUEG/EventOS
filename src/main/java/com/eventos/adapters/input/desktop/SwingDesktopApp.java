@@ -41,6 +41,7 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -58,19 +59,17 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 
 public class SwingDesktopApp extends JFrame {
-    private final EventUseCase eventUseCase;
-    private final RegistrationUseCase registrationUseCase;
-    private final AttendanceUseCase attendanceUseCase;
-    private final SurveyUseCase surveyUseCase;
-    private final CertificateUseCase certificateUseCase;
-    private final ReportUseCase reportUseCase;
-    private final AuthUseCase authUseCase;
+    private final EventOsApiClient apiClient;
 
     private JTextField txtEventTitle;
     private JTextArea txtEventDesc;
     private JTextField txtEventStart;
     private JTextField txtEventEnd;
     private JTextField txtEventCapacity;
+    private JCheckBox chkActivitySelectionEnabled;
+    private JCheckBox chkActivitySelectionRequired;
+    private JTextField txtRegistrationDeadline;
+    private JTextField txtEventTimeZone;
     private DefaultListModel<String> eventListModel;
     private JList<String> eventList;
     private List<Event> loadedEvents = new ArrayList<>();
@@ -103,21 +102,8 @@ public class SwingDesktopApp extends JFrame {
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
-    public SwingDesktopApp(EventUseCase eventUseCase,
-                           RegistrationUseCase registrationUseCase,
-                           AttendanceUseCase attendanceUseCase,
-                           SurveyUseCase surveyUseCase,
-                           CertificateUseCase certificateUseCase,
-                           ReportUseCase reportUseCase,
-                           AuthUseCase authUseCase) {
-        this.eventUseCase = eventUseCase;
-        this.registrationUseCase = registrationUseCase;
-        this.attendanceUseCase = attendanceUseCase;
-        this.surveyUseCase = surveyUseCase;
-        this.certificateUseCase = certificateUseCase;
-        this.reportUseCase = reportUseCase;
-        this.authUseCase = authUseCase;
-
+    public SwingDesktopApp(EventOsApiClient apiClient) {
+        this.apiClient = apiClient;
         initUI();
         refreshAllData();
     }
@@ -194,7 +180,23 @@ public class SwingDesktopApp extends JFrame {
         txtEventCapacity = new JTextField("300");
         gbc.gridx = 1; form.add(txtEventCapacity, gbc);
 
-        gbc.gridy = 6; gbc.gridx = 0; gbc.gridwidth = 2;
+        gbc.gridy = 6; gbc.gridx = 0; form.add(new JLabel("Prazo de inscrição:"), gbc);
+        txtRegistrationDeadline = new JTextField(LocalDateTime.now().plusDays(1).minusHours(1).format(FMT));
+        gbc.gridx = 1; form.add(txtRegistrationDeadline, gbc);
+
+        gbc.gridy = 7; gbc.gridx = 0; form.add(new JLabel("Fuso horário:"), gbc);
+        txtEventTimeZone = new JTextField("America/Sao_Paulo");
+        gbc.gridx = 1; form.add(txtEventTimeZone, gbc);
+
+        gbc.gridy = 8; gbc.gridx = 0; form.add(new JLabel("Escolha de atividades:"), gbc);
+        JPanel selectionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        chkActivitySelectionEnabled = new JCheckBox("Habilitada", true);
+        chkActivitySelectionRequired = new JCheckBox("Obrigatória", false);
+        selectionPanel.add(chkActivitySelectionEnabled);
+        selectionPanel.add(chkActivitySelectionRequired);
+        gbc.gridx = 1; form.add(selectionPanel, gbc);
+
+        gbc.gridy = 9; gbc.gridx = 0; gbc.gridwidth = 2;
         JButton btnCreate = new JButton("Criar Evento (Rascunho)");
         btnCreate.setBackground(new Color(37, 99, 235));
         btnCreate.setForeground(Color.WHITE);
@@ -215,8 +217,11 @@ public class SwingDesktopApp extends JFrame {
         btnPublish.addActionListener(e -> handlePublishSelectedEvent());
         JButton btnCancel = new JButton("Cancelar Evento");
         btnCancel.addActionListener(e -> handleCancelSelectedEvent());
+        JButton btnFinish = new JButton("Encerrar Evento");
+        btnFinish.addActionListener(e -> handleFinishSelectedEvent());
         actions.add(btnPublish);
         actions.add(btnCancel);
+        actions.add(btnFinish);
         right.add(actions, BorderLayout.SOUTH);
 
         splitPane.setRightComponent(right);
@@ -420,8 +425,12 @@ public class SwingDesktopApp extends JFrame {
 
             Event event = new Event(null, title, desc, new Period(start, end),
                     EventStatus.DRAFT, 1L, null, cap, new MinimumAttendancePercentagePolicy(75.0));
+            event.configureRegistration(chkActivitySelectionEnabled.isSelected(),
+                    chkActivitySelectionRequired.isSelected(),
+                    LocalDateTime.parse(txtRegistrationDeadline.getText().trim(), FMT),
+                    txtEventTimeZone.getText().trim());
 
-            eventUseCase.createEvent(event);
+            apiClient.createEvent(event);
             JOptionPane.showMessageDialog(this, "Evento criado com sucesso (Status: RASCUNHO)!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
             refreshAllData();
         } catch (Exception ex) {
@@ -437,7 +446,7 @@ public class SwingDesktopApp extends JFrame {
         }
         Event e = loadedEvents.get(idx);
         try {
-            eventUseCase.publishEvent(e.getId());
+            apiClient.publishEvent(e.getId());
             JOptionPane.showMessageDialog(this, "Evento publicado com sucesso! Ja esta visivel no site publico.", "Publicado", JOptionPane.INFORMATION_MESSAGE);
             refreshAllData();
         } catch (Exception ex) {
@@ -450,8 +459,21 @@ public class SwingDesktopApp extends JFrame {
         if (idx < 0 || idx >= loadedEvents.size()) return;
         Event e = loadedEvents.get(idx);
         try {
-            eventUseCase.cancelEvent(e.getId());
+            apiClient.cancelEvent(e.getId());
             JOptionPane.showMessageDialog(this, "Evento cancelado.", "Info", JOptionPane.INFORMATION_MESSAGE);
+            refreshAllData();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void handleFinishSelectedEvent() {
+        int idx = eventList.getSelectedIndex();
+        if (idx < 0 || idx >= loadedEvents.size()) return;
+        Event event = loadedEvents.get(idx);
+        try {
+            apiClient.finishEvent(event.getId());
+            JOptionPane.showMessageDialog(this, "Evento encerrado.", "Info", JOptionPane.INFORMATION_MESSAGE);
             refreshAllData();
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Erro: " + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
@@ -483,7 +505,7 @@ public class SwingDesktopApp extends JFrame {
                     new ActivityLocation(room, track, cap), type, cap, 0, speakers,
                     AttendancePolicyFactory.create(polStr), true);
 
-            eventUseCase.addActivityToEvent(event.getId(), act);
+            apiClient.addActivity(event.getId(), act);
             JOptionPane.showMessageDialog(this, "Atividade adicionada com sucesso!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
             refreshAllData();
         } catch (Exception ex) {
@@ -495,7 +517,7 @@ public class SwingDesktopApp extends JFrame {
         try {
             Activity act = getSelectedActivityForAttendance();
             if (act == null) return;
-            String token = attendanceUseCase.generateQrToken(act.getId());
+            String token = apiClient.generateQrToken(act.getId());
             txtQrTokenDisplay.setText(token);
             JOptionPane.showMessageDialog(this, "Token QR Code gerado com sucesso!\nToken seguro: " + token +
                     "\n\nOs participantes podem utilizar este token no site publico para registrar presenca.", "QR Code Ativo", JOptionPane.INFORMATION_MESSAGE);
@@ -521,7 +543,7 @@ public class SwingDesktopApp extends JFrame {
         }
 
         try {
-            attendanceUseCase.recordManualAttendance(act.getId(), userId, 1L, type, reason.trim());
+            apiClient.recordManualAttendance(act.getId(), userId, type, reason.trim());
             JOptionPane.showMessageDialog(this, "Presenca manual lancada e auditada com sucesso!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
             refreshAttendanceTable();
         } catch (Exception ex) {
@@ -541,7 +563,7 @@ public class SwingDesktopApp extends JFrame {
                             new SurveyQuestion(null, "Criticas ou sugestoes:", QuestionType.TEXT, List.of(), false)
                     ), true);
 
-            surveyUseCase.createSurvey(survey);
+            apiClient.createSurvey(survey);
             JOptionPane.showMessageDialog(this, "Questionario configurado com sucesso!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
             refreshSurveyResults();
         } catch (Exception ex) {
@@ -553,7 +575,7 @@ public class SwingDesktopApp extends JFrame {
         Event ev = getSelectedEventForReport();
         if (ev == null) return;
         try {
-            byte[] csv = reportUseCase.exportEnrolledCsv(ev.getId());
+            byte[] csv = apiClient.enrolledCsv(ev.getId());
             JFileChooser fc = new JFileChooser();
             fc.setSelectedFile(new File("relatorio_inscritos_" + ev.getId() + ".csv"));
             if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
@@ -571,7 +593,7 @@ public class SwingDesktopApp extends JFrame {
         Event ev = getSelectedEventForReport();
         if (ev == null) return;
         try {
-            byte[] pdf = reportUseCase.exportEnrolledPdf(ev.getId());
+            byte[] pdf = apiClient.enrolledPdf(ev.getId());
             JFileChooser fc = new JFileChooser();
             fc.setSelectedFile(new File("relatorio_inscritos_" + ev.getId() + ".pdf"));
             if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
@@ -589,7 +611,7 @@ public class SwingDesktopApp extends JFrame {
         Event ev = getSelectedEventForReport();
         if (ev == null) return;
         try {
-            byte[] pdf = reportUseCase.exportAttendancePdf(ev.getId());
+            byte[] pdf = apiClient.attendancePdf(ev.getId());
             JFileChooser fc = new JFileChooser();
             fc.setSelectedFile(new File("relatorio_frequencia_" + ev.getId() + ".pdf"));
             if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
@@ -605,7 +627,7 @@ public class SwingDesktopApp extends JFrame {
 
     public void refreshAllData() {
         try {
-            loadedEvents = eventUseCase.listEvents();
+            loadedEvents = apiClient.listEvents();
             eventListModel.clear();
             cbActivityEvents.removeAllItems();
             cbAttendanceEvents.removeAllItems();
@@ -633,7 +655,7 @@ public class SwingDesktopApp extends JFrame {
         int idx = cbActivityEvents.getSelectedIndex();
         if (idx < 0 || idx >= loadedEvents.size()) return;
         Event ev = loadedEvents.get(idx);
-        List<Activity> acts = eventUseCase.getEventActivities(ev.getId());
+        List<Activity> acts = apiClient.listActivities(ev.getId());
         for (Activity a : acts) {
             activityListModel.addElement(String.format("ID: %-3d | %-30s | Sala: %-15s | Vagas: %d/%d | Pol: %s",
                     a.getId(), a.getTitle(), a.getLocation().getRoom(), a.getCurrentEnrollments(), a.getMaxCapacity(), a.getAttendancePolicy().getPolicyName()));
@@ -645,7 +667,7 @@ public class SwingDesktopApp extends JFrame {
         int idx = cbAttendanceEvents.getSelectedIndex();
         if (idx < 0 || idx >= loadedEvents.size()) return;
         Event ev = loadedEvents.get(idx);
-        List<Activity> acts = eventUseCase.getEventActivities(ev.getId());
+        List<Activity> acts = apiClient.listActivities(ev.getId());
         for (Activity a : acts) {
             cbAttendanceActivities.addItem(a.getId() + " - " + a.getTitle());
         }
@@ -657,7 +679,7 @@ public class SwingDesktopApp extends JFrame {
         Activity act = getSelectedActivityForAttendance();
         if (act == null) return;
 
-        List<AttendanceStatusDto> list = attendanceUseCase.getActivityAttendanceOverview(act.getId());
+        List<AttendanceStatusDto> list = apiClient.attendanceOverview(act.getId());
         for (AttendanceStatusDto dto : list) {
             modelAttendance.addRow(new Object[]{
                     dto.getUserId(),
@@ -673,7 +695,7 @@ public class SwingDesktopApp extends JFrame {
     private void refreshSurveyActivities() {
         cbSurveyActivities.removeAllItems();
         for (Event e : loadedEvents) {
-            for (Activity a : eventUseCase.getEventActivities(e.getId())) {
+            for (Activity a : apiClient.listActivities(e.getId())) {
                 cbSurveyActivities.addItem(a.getId() + " - " + a.getTitle() + " (" + e.getTitle() + ")");
             }
         }
@@ -688,7 +710,7 @@ public class SwingDesktopApp extends JFrame {
         }
 
         try {
-            SurveyResultsDto res = surveyUseCase.getConsolidatedResults(act.getId());
+            SurveyResultsDto res = apiClient.surveyResults(act.getId());
             StringBuilder sb = new StringBuilder();
             sb.append("========================================================================\n");
             sb.append("CONSOLIDACAO DE AVALIACOES - ATIVIDADE: ").append(res.getActivityTitle()).append("\n");
@@ -731,8 +753,8 @@ public class SwingDesktopApp extends JFrame {
         }
 
         try {
-            EnrolledReportDto enrolled = reportUseCase.getEnrolledReport(ev.getId());
-            AttendanceReportDto attendance = reportUseCase.getAttendanceReport(ev.getId());
+            EnrolledReportDto enrolled = apiClient.enrolledReport(ev.getId());
+            AttendanceReportDto attendance = apiClient.attendanceReport(ev.getId());
 
             StringBuilder sb = new StringBuilder();
             sb.append("RELATORIO EXECUTIVO DO EVENTO: ").append(ev.getTitle()).append("\n");
@@ -757,14 +779,14 @@ public class SwingDesktopApp extends JFrame {
         String sel = (String) cbAttendanceActivities.getSelectedItem();
         if (sel == null) return null;
         Long id = Long.parseLong(sel.split(" - ")[0]);
-        return eventUseCase.getActivity(id);
+        return apiClient.getActivity(id);
     }
 
     private Activity getSelectedActivityForSurvey() {
         String sel = (String) cbSurveyActivities.getSelectedItem();
         if (sel == null) return null;
         Long id = Long.parseLong(sel.split(" - ")[0]);
-        return eventUseCase.getActivity(id);
+        return apiClient.getActivity(id);
     }
 
     private Event getSelectedEventForReport() {

@@ -1,6 +1,7 @@
 package com.eventos;
 
 import com.eventos.adapters.input.desktop.SwingDesktopApp;
+import com.eventos.adapters.input.desktop.EventOsApiClient;
 import com.eventos.adapters.input.rest.RestApiController;
 import com.eventos.adapters.output.pdf.OpenPdfGeneratorAdapter;
 import com.eventos.adapters.output.persistence.DatabaseManager;
@@ -12,7 +13,8 @@ import com.eventos.adapters.output.persistence.JdbcEventRepository;
 import com.eventos.adapters.output.persistence.JdbcRegistrationRepository;
 import com.eventos.adapters.output.persistence.JdbcSurveyRepository;
 import com.eventos.adapters.output.persistence.JdbcUserRepository;
-import com.eventos.adapters.output.security.Sha256SecurityAdapter;
+import com.eventos.adapters.output.security.Pbkdf2SecurityAdapter;
+import com.eventos.adapters.output.security.InMemorySessionStore;
 import com.eventos.application.ports.input.AttendanceUseCase;
 import com.eventos.application.ports.input.AuthUseCase;
 import com.eventos.application.ports.input.CertificateUseCase;
@@ -59,7 +61,8 @@ public class EventosApplication {
         JdbcSurveyRepository surveyRepository = new JdbcSurveyRepository();
         JdbcCertificateRepository certificateRepository = new JdbcCertificateRepository();
 
-        Sha256SecurityAdapter securityAdapter = new Sha256SecurityAdapter();
+        Pbkdf2SecurityAdapter securityAdapter = new Pbkdf2SecurityAdapter();
+        InMemorySessionStore sessionStore = new InMemorySessionStore();
         OpenPdfGeneratorAdapter pdfGeneratorAdapter = new OpenPdfGeneratorAdapter();
 
         // 3. Povoamento de Dados de Demonstração (Seed Demo Data para CA-01 a CA-08)
@@ -85,13 +88,11 @@ public class EventosApplication {
                 staticFiles.directory = "/public";
                 staticFiles.location = Location.CLASSPATH;
             });
-            config.bundledPlugins.enableCors(cors -> {
-                cors.addRule(it -> it.anyHost());
-            });
         }).start(7000);
 
         // 6. Roteamento REST da API (RNF-02)
-        new RestApiController(authUseCase, eventUseCase, registrationUseCase, attendanceUseCase, surveyUseCase, certificateUseCase, reportUseCase, app);
+        new RestApiController(authUseCase, eventUseCase, registrationUseCase, attendanceUseCase,
+                surveyUseCase, certificateUseCase, reportUseCase, sessionStore, app);
 
         System.out.println("✔ Servidor REST e Site Público disponíveis em: http://localhost:7000");
 
@@ -101,9 +102,9 @@ public class EventosApplication {
                 try {
                     UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
                 } catch (Exception ignored) {}
-                SwingDesktopApp desktopApp = new SwingDesktopApp(
-                        eventUseCase, registrationUseCase, attendanceUseCase, surveyUseCase, certificateUseCase, reportUseCase, authUseCase
-                );
+                EventOsApiClient apiClient = new EventOsApiClient("http://localhost:7000");
+                apiClient.login("marcio.giovane@universidade.edu.br", "marcio123");
+                SwingDesktopApp desktopApp = new SwingDesktopApp(apiClient);
                 desktopApp.setVisible(true);
             });
         } else {

@@ -9,7 +9,7 @@ import com.eventos.adapters.output.persistence.JdbcEventRepository;
 import com.eventos.adapters.output.persistence.JdbcRegistrationRepository;
 import com.eventos.adapters.output.persistence.JdbcSurveyRepository;
 import com.eventos.adapters.output.persistence.JdbcUserRepository;
-import com.eventos.adapters.output.security.Sha256SecurityAdapter;
+import com.eventos.adapters.output.security.Pbkdf2SecurityAdapter;
 import com.eventos.application.dtos.EnrolledReportDto;
 import com.eventos.application.ports.input.AttendanceUseCase;
 import com.eventos.application.ports.input.AuthUseCase;
@@ -75,7 +75,7 @@ public class HexagonalUseCaseIntegrationTest {
         JdbcSurveyRepository surveyRepo = new JdbcSurveyRepository();
         JdbcCertificateRepository certRepo = new JdbcCertificateRepository();
 
-        Sha256SecurityAdapter sec = new Sha256SecurityAdapter();
+        Pbkdf2SecurityAdapter sec = new Pbkdf2SecurityAdapter();
         OpenPdfGeneratorAdapter pdf = new OpenPdfGeneratorAdapter();
 
         authUseCase = new AuthServiceImpl(userRepo, sec);

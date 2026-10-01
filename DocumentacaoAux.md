@@ -49,11 +49,17 @@ Atendendo à diretriz de avaliação, removemos o ecossistema Spring Boot. A fia
 2.  **API REST com Javalin**:
     *   Adotamos o **Javalin 6.x**, um framework extremamente leve rodando sob o Jetty embarcado. Ele oferece roteamento rápido e limpo sem a sobrecarga ou anotações complexas de controllers do Spring Boot.
 3.  **Persistência com JDBC Puro (Java Database Connectivity)**:
-    *   Substituímos o Spring Data JPA (Hibernate) por prepared statements SQL nativos. O [DatabaseManager.java](file:///C:/Users/Guilherme/Documents/EventOS/src/main/java/com/eventos/adapters/output/persistence/DatabaseManager.java) cria as tabelas automaticamente na inicialização e o [EventPersistenceAdapter.java](file:///C:/Users/Guilherme/Documents/EventOS/src/main/java/com/eventos/adapters/output/persistence/EventPersistenceAdapter.java) gerencia a gravação de forma transacional (`setAutoCommit(false)`), garantindo atomicidade e isolamento ao persistir um Evento e suas Atividades.
+    *   Substituímos o Spring Data JPA (Hibernate) por prepared statements SQL nativos. `DatabaseManager` cria e migra as tabelas na inicialização; os adaptadores `Jdbc*Repository` implementam as portas de persistência do núcleo atual.
+
+## 4. Refatorações relevantes
+
+1. **Unificação do domínio:** removemos o modelo legado `com.eventos.domain.Event/Activity/Participant` e seus adaptadores incompatíveis. Antes havia duas representações concorrentes e o projeto não compilava; agora todas as portas utilizam `com.eventos.domain.model`.
+2. **Autorização no servidor:** a interface simulava perfis no navegador. A autenticação agora cria sessão opaca no servidor, o cadastro público sempre gera participante e os handlers validam perfil, identidade e responsabilidade pelo evento.
+3. **Segurança e frequência:** SHA-256 com salt fixo foi substituído por PBKDF2 com salt aleatório. Tokens QR agora usam HMAC, expiram em 15 minutos e registros repetidos são tratados de modo idempotente.
 
 ---
 
-## 4. Compatibilidade Headless (Swing em Ambientes de Servidor/Teste)
+## 5. Compatibilidade Headless (Swing em Ambientes de Servidor/Teste)
 
 ### O Problema
 A classe `SwingDesktopApp` estende `JFrame` do Java Swing. Ao rodar testes automatizados ou iniciar a aplicação em servidores em nuvem (onde não há ambiente gráfico/monitor disponível), a JVM tenta inicializar componentes gráficos e lança o erro `java.awt.HeadlessException`.

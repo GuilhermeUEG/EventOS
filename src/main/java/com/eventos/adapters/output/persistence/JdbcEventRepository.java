@@ -33,7 +33,13 @@ public class JdbcEventRepository implements EventRepository {
         }
 
         if (event.getId() == null) {
-            String sql = "INSERT INTO events (title, description, start_date, end_date, status, organizer_id, max_capacity, cert_policy_type, cert_policy_param) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            String sql = """
+                    INSERT INTO events
+                    (title, description, start_date, end_date, status, organizer_id, max_capacity,
+                     cert_policy_type, cert_policy_param, activity_selection_enabled,
+                     activity_selection_required, registration_deadline, time_zone)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """;
             try (Connection conn = DatabaseManager.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 stmt.setString(1, event.getTitle());
@@ -45,19 +51,35 @@ public class JdbcEventRepository implements EventRepository {
                 stmt.setInt(7, event.getMaxCapacity());
                 stmt.setString(8, policyType);
                 stmt.setDouble(9, policyParam);
+                stmt.setBoolean(10, event.isActivitySelectionEnabled());
+                stmt.setBoolean(11, event.isActivitySelectionRequired());
+                if (event.getRegistrationDeadline() != null) {
+                    stmt.setTimestamp(12, Timestamp.valueOf(event.getRegistrationDeadline()));
+                } else {
+                    stmt.setNull(12, java.sql.Types.TIMESTAMP);
+                }
+                stmt.setString(13, event.getTimeZone());
                 stmt.executeUpdate();
                 try (ResultSet rs = stmt.getGeneratedKeys()) {
                     if (rs.next()) {
-                        return new Event(rs.getLong(1), event.getTitle(), event.getDescription(),
+                        Event saved = new Event(rs.getLong(1), event.getTitle(), event.getDescription(),
                                 event.getPeriod(), event.getStatus(), event.getOrganizerId(),
                                 event.getActivities(), event.getMaxCapacity(), event.getCertificateEligibilityPolicy());
+                        saved.configureRegistration(event.isActivitySelectionEnabled(),
+                                event.isActivitySelectionRequired(), event.getRegistrationDeadline(), event.getTimeZone());
+                        return saved;
                     }
                 }
             } catch (SQLException e) {
                 throw new RuntimeException("Erro ao inserir evento: " + e.getMessage(), e);
             }
         } else {
-            String sql = "UPDATE events SET title = ?, description = ?, start_date = ?, end_date = ?, status = ?, max_capacity = ?, cert_policy_type = ?, cert_policy_param = ? WHERE id = ?";
+            String sql = """
+                    UPDATE events SET title = ?, description = ?, start_date = ?, end_date = ?,
+                    status = ?, max_capacity = ?, cert_policy_type = ?, cert_policy_param = ?,
+                    activity_selection_enabled = ?, activity_selection_required = ?,
+                    registration_deadline = ?, time_zone = ? WHERE id = ?
+                    """;
             try (Connection conn = DatabaseManager.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, event.getTitle());
@@ -68,7 +90,15 @@ public class JdbcEventRepository implements EventRepository {
                 stmt.setInt(6, event.getMaxCapacity());
                 stmt.setString(7, policyType);
                 stmt.setDouble(8, policyParam);
-                stmt.setLong(9, event.getId());
+                stmt.setBoolean(9, event.isActivitySelectionEnabled());
+                stmt.setBoolean(10, event.isActivitySelectionRequired());
+                if (event.getRegistrationDeadline() != null) {
+                    stmt.setTimestamp(11, Timestamp.valueOf(event.getRegistrationDeadline()));
+                } else {
+                    stmt.setNull(11, java.sql.Types.TIMESTAMP);
+                }
+                stmt.setString(12, event.getTimeZone());
+                stmt.setLong(13, event.getId());
                 stmt.executeUpdate();
                 return event;
             } catch (SQLException e) {
@@ -170,7 +200,7 @@ public class JdbcEventRepository implements EventRepository {
                 ? new MandatoryActivitiesPolicy((int) polParam)
                 : new MinimumAttendancePercentagePolicy(polParam > 0 ? polParam : 75.0);
 
-        return new Event(
+        Event event = new Event(
                 rs.getLong("id"),
                 rs.getString("title"),
                 rs.getString("description"),
@@ -181,5 +211,12 @@ public class JdbcEventRepository implements EventRepository {
                 rs.getInt("max_capacity"),
                 policy
         );
+        Timestamp deadline = rs.getTimestamp("registration_deadline");
+        event.configureRegistration(
+                rs.getBoolean("activity_selection_enabled"),
+                rs.getBoolean("activity_selection_required"),
+                deadline != null ? deadline.toLocalDateTime() : event.getPeriod().getStart(),
+                rs.getString("time_zone") != null ? rs.getString("time_zone") : "America/Sao_Paulo");
+        return event;
     }
 }

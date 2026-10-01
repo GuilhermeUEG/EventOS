@@ -25,6 +25,10 @@ public class Event implements Serializable {
     private final List<Activity> activities;
     private int maxCapacity;
     private CertificateEligibilityPolicy certificateEligibilityPolicy;
+    private boolean activitySelectionEnabled;
+    private boolean activitySelectionRequired;
+    private LocalDateTime registrationDeadline;
+    private String timeZone;
 
     public Event(Long id, String title, String description, Period period,
                  EventStatus status, Long organizerId, List<Activity> activities,
@@ -46,6 +50,10 @@ public class Event implements Serializable {
         this.certificateEligibilityPolicy = certificateEligibilityPolicy != null
                 ? certificateEligibilityPolicy
                 : new MinimumAttendancePercentagePolicy(75.0);
+        this.activitySelectionEnabled = true;
+        this.activitySelectionRequired = false;
+        this.registrationDeadline = period.getStart();
+        this.timeZone = "America/Sao_Paulo";
     }
 
     public Long getId() {
@@ -84,10 +92,52 @@ public class Event implements Serializable {
         return certificateEligibilityPolicy;
     }
 
+    public boolean isActivitySelectionEnabled() {
+        return activitySelectionEnabled;
+    }
+
+    public boolean isActivitySelectionRequired() {
+        return activitySelectionRequired;
+    }
+
+    public LocalDateTime getRegistrationDeadline() {
+        return registrationDeadline;
+    }
+
+    public String getTimeZone() {
+        return timeZone;
+    }
+
     public void setCertificateEligibilityPolicy(CertificateEligibilityPolicy policy) {
         if (policy != null) {
             this.certificateEligibilityPolicy = policy;
         }
+    }
+
+    public void configureRegistration(boolean selectionEnabled, boolean selectionRequired,
+                                      LocalDateTime deadline, String timeZone) {
+        if (selectionRequired && !selectionEnabled) {
+            throw new ValidationException("A seleção não pode ser obrigatória quando a escolha de atividades está desativada.");
+        }
+        if (deadline != null && deadline.isAfter(period.getEnd())) {
+            throw new ValidationException("O prazo de inscrição não pode ser posterior ao encerramento do evento.");
+        }
+        if (timeZone == null || timeZone.isBlank()) {
+            throw new ValidationException("Fuso horário do evento é obrigatório.");
+        }
+        try {
+            java.time.ZoneId.of(timeZone);
+        } catch (Exception e) {
+            throw new ValidationException("Fuso horário inválido: " + timeZone);
+        }
+        this.activitySelectionEnabled = selectionEnabled;
+        this.activitySelectionRequired = selectionRequired;
+        this.registrationDeadline = deadline != null ? deadline : period.getStart();
+        this.timeZone = timeZone;
+    }
+
+    public boolean isRegistrationWithinDeadline(LocalDateTime now) {
+        return registrationDeadline == null || !now.isAfter(registrationDeadline);
     }
 
     public void updateDetails(String newTitle, String newDescription, Period newPeriod, int newCapacity) {
@@ -118,6 +168,9 @@ public class Event implements Serializable {
     }
 
     public void finish() {
+        if (this.status != EventStatus.PUBLISHED && this.status != EventStatus.IN_PROGRESS) {
+            throw new BusinessRuleException("Somente eventos publicados ou em andamento podem ser encerrados.");
+        }
         this.status = EventStatus.FINISHED;
     }
 

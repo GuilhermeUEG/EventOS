@@ -1009,9 +1009,16 @@
 
                     <div class="dropdown-divider"></div>
 
+                    <div class="account-option-item" onclick="openAuthModal(); toggleAccountDropdown();">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:var(--accent);"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                        <span style="font-size:12px; font-weight:600; color:var(--text-heading);">Entrar ou criar conta</span>
+                    </div>
                     <div class="account-option-item" onclick="openProfileModal(); toggleAccountDropdown();">
                         <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                         <span style="font-size:12px; font-weight:600; color:var(--text-heading);">Ver Meu Perfil Completo</span>
+                    </div>
+                    <div class="account-option-item" onclick="logout()">
+                        <span style="font-size:12px; font-weight:600; color:var(--danger);">Sair</span>
                     </div>
                 </div>
 
@@ -1040,7 +1047,7 @@
                 </div>
 
                 <div class="topbar-actions">
-                    <button class="btn-action btn-secondary" onclick="openFeedbackModal(1)">
+                    <button class="btn-action btn-secondary" onclick="openFeedbackModal()">
                         <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                         <span>Avaliar Atividade</span>
                     </button>
@@ -1224,7 +1231,10 @@
                             <h2 class="font-heading" style="font-size:20px;">Minha Agenda de Atividades</h2>
                             <p style="font-size:13px; color:var(--text-muted);">Atividades confirmadas no seu itinerário com validação de conflitos de horário (RF-16).</p>
                         </div>
-                        <button class="btn-action btn-secondary" onclick="showTab('prog')">Adicionar Mais Atividades</button>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-action btn-secondary" onclick="showTab('prog')">Adicionar Mais Atividades</button>
+                            <button class="btn-action btn-secondary" style="color:var(--danger);" onclick="cancelEventRegistration()">Cancelar Inscrição</button>
+                        </div>
                     </div>
 
                     <div class="activity-list" id="agenda-list-wrap">
@@ -1482,6 +1492,38 @@
         </div>
     </div>
 
+    <!-- MODAL: AUTENTICAÇÃO E CADASTRO -->
+    <div class="modal-overlay" id="modal-auth">
+        <div class="modal-box">
+            <div class="modal-head">
+                <div>
+                    <h3 style="font-size:17px; font-weight:700;">Entrar no EventOS</h3>
+                    <p style="font-size:12px; color:var(--text-muted);">Use sua conta ou cadastre-se como participante.</p>
+                </div>
+                <button class="modal-close" onclick="closeModal('modal-auth')">×</button>
+            </div>
+            <div class="modal-content">
+                <label class="form-label">E-mail</label>
+                <input type="email" class="form-input" id="auth-email" autocomplete="email">
+                <label class="form-label">Senha</label>
+                <input type="password" class="form-input" id="auth-password" autocomplete="current-password">
+                <button class="btn-action btn-primary" style="width:100%; justify-content:center;" onclick="login()">
+                    Entrar
+                </button>
+
+                <div class="dropdown-divider" style="margin:20px 0;"></div>
+                <label class="form-label">Nome para nova conta</label>
+                <input type="text" class="form-input" id="register-name" autocomplete="name">
+                <button class="btn-action btn-secondary" style="width:100%; justify-content:center;" onclick="registerAccount()">
+                    Criar conta e entrar
+                </button>
+                <p style="font-size:11px; color:var(--text-muted); margin-top:10px;">
+                    Contas públicas são sempre criadas com perfil de participante.
+                </p>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: PERFIL DO USUÁRIO -->
     <div class="modal-overlay" id="modal-profile">
         <div class="modal-box">
@@ -1520,17 +1562,9 @@
                 </button>
             </div>
             <div class="modal-content">
-                <label class="form-label">Como você avalia a clareza técnica da atividade?</label>
-                <select class="form-select" id="feedback-score">
-                    <option value="5">Excelente (5 estrelas)</option>
-                    <option value="4">Muito Bom (4 estrelas)</option>
-                    <option value="3">Regular (3 estrelas)</option>
-                    <option value="2">Insatisfatório (2 estrelas)</option>
-                    <option value="1">Ruim (1 estrela)</option>
-                </select>
-
-                <label class="form-label">Comentários e Sugestões para o Docente:</label>
-                <textarea class="form-textarea" id="feedback-text" rows="3" placeholder="Gostei muito da explicação sobre o padrão Strategy e encapsulamento de invariantes..."></textarea>
+                <div id="feedback-questions">
+                    <p style="font-size:13px; color:var(--text-muted);">Carregando questionário...</p>
+                </div>
 
                 <button class="btn-action btn-primary" style="width:100%; justify-content:center;" onclick="submitFeedback()">
                     Enviar Avaliação
@@ -1541,11 +1575,12 @@
 
     <script>
         // GLOBAL STATE
-        let activeUser = {
-            id: 5,
-            name: "Guilherme Barbosa",
-            email: "guilherme.barbosa@aluno.edu.br",
-            role: "PARTICIPANT"
+        let authToken = localStorage.getItem('eventos_token');
+        let activeUser = JSON.parse(localStorage.getItem('eventos_user') || 'null') || {
+            id: null,
+            name: "Visitante",
+            email: "",
+            role: "GUEST"
         };
         let allEvents = [];
         let currentEventId = 1;
@@ -1553,6 +1588,92 @@
         let activities = [];
         let userRegs = [];
         let currentProjectorToken = "";
+        let currentSurvey = null;
+        let currentFeedbackActivityId = null;
+
+        async function apiFetch(url, options = {}) {
+            const headers = new Headers(options.headers || {});
+            if (authToken) headers.set('Authorization', `Bearer ${authToken}`);
+            const response = await window.fetch(url, { ...options, headers });
+            if (response.status === 401 && authToken) {
+                clearSession();
+                updateUI();
+            }
+            return response;
+        }
+
+        function persistSession(payload) {
+            authToken = payload.token;
+            activeUser = payload.user;
+            localStorage.setItem('eventos_token', authToken);
+            localStorage.setItem('eventos_user', JSON.stringify(activeUser));
+        }
+
+        function clearSession() {
+            authToken = null;
+            activeUser = { id: null, name: "Visitante", email: "", role: "GUEST" };
+            userRegs = [];
+            localStorage.removeItem('eventos_token');
+            localStorage.removeItem('eventos_user');
+        }
+
+        function openAuthModal() {
+            document.getElementById('modal-auth').classList.add('active');
+        }
+
+        async function login(emailOverride, passwordOverride) {
+            const email = emailOverride || document.getElementById('auth-email').value.trim();
+            const password = passwordOverride || document.getElementById('auth-password').value;
+            try {
+                const res = await apiFetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Credenciais inválidas.');
+                persistSession(data);
+                closeModal('modal-auth');
+                await loadEventsList();
+                await loadData();
+                updateUI();
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function registerAccount() {
+            const name = document.getElementById('register-name').value.trim();
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            try {
+                const res = await apiFetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Não foi possível criar a conta.');
+                persistSession(data);
+                closeModal('modal-auth');
+                await loadData();
+                updateUI();
+                alert('Conta criada. Agora escolha um evento e confirme sua inscrição.');
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function logout() {
+            if (authToken) {
+                try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+            }
+            clearSession();
+            toggleAccountDropdown();
+            await loadEventsList();
+            await loadData();
+            updateUI();
+        }
 
         // DATE PARSER
         function parseDate(d) {
@@ -1611,29 +1732,34 @@
             trigger.classList.toggle('active');
         }
 
-        function selectPersonaDropdown(id, name, role) {
-            activeUser.id = id;
-            activeUser.name = name;
-            activeUser.role = role;
-            activeUser.email = id <= 4 ? 
-                `${name.toLowerCase().replace('prof. ', '').replace('profa. ', '').replace(' ', '.')}@universidade.edu.br` : 
-                `${name.toLowerCase().replace(' ', '.')}@aluno.edu.br`;
-
-            // Update selected check in dropdown
+        async function selectPersonaDropdown(id) {
+            const demoCredentials = {
+                1: ['marcio.giovane@universidade.edu.br', 'marcio123'],
+                2: ['joilson.brito@universidade.edu.br', 'joilson123'],
+                3: ['guiliano.rangel@universidade.edu.br', 'guiliano123'],
+                4: ['juliana.braga@universidade.edu.br', 'juliana123'],
+                5: ['guilherme.barbosa@aluno.edu.br', 'gui123'],
+                6: ['murilo.mendes@aluno.edu.br', 'murilo123'],
+                7: ['danielly.mendes@aluno.edu.br', 'dani123'],
+                8: ['samir.santana@aluno.edu.br', 'samir123']
+            };
+            const credentials = demoCredentials[id];
+            if (!credentials) return;
+            toggleAccountDropdown();
+            await login(credentials[0], credentials[1]);
             document.querySelectorAll('.account-option-item').forEach(item => item.classList.remove('selected'));
             const opt = document.getElementById(`opt-user-${id}`);
             if (opt) opt.classList.add('selected');
-
-            toggleAccountDropdown();
-
-            loadData().then(() => updateUI());
         }
 
         async function loadEventsList() {
             try {
-                const res = await fetch('/api/events');
+                const res = await apiFetch('/api/events');
                 if (res.ok) {
                     allEvents = await res.json();
+                    if (allEvents.length && !allEvents.some(e => e.id === currentEventId)) {
+                        currentEventId = allEvents[0].id;
+                    }
                     const dropdown = document.getElementById('global-event-select');
                     const projEventSelect = document.getElementById('projector-event-select');
                     dropdown.innerHTML = allEvents.map(e => `<option value="${e.id}">${e.title}</option>`).join('');
@@ -1663,14 +1789,18 @@
 
         async function loadData() {
             try {
-                const res = await fetch(`/api/events/${currentEventId}`);
+                const res = await apiFetch(`/api/events/${currentEventId}`);
                 if (res.ok) {
                     eventData = await res.json();
                     activities = eventData.activities || [];
                 }
-                const regRes = await fetch(`/api/registrations/user/${activeUser.id}`);
-                if (regRes.ok) {
-                    userRegs = await regRes.json();
+                if (activeUser.id) {
+                    const regRes = await apiFetch(`/api/registrations/user/${activeUser.id}`);
+                    if (regRes.ok) {
+                        userRegs = await regRes.json();
+                    }
+                } else {
+                    userRegs = [];
                 }
             } catch (err) {
                 console.error("Erro ao carregar dados:", err);
@@ -1698,7 +1828,9 @@
 
         function updateSidebarAndRole() {
             document.getElementById('sb-user-name').textContent = activeUser.name;
-            document.getElementById('sb-user-role').textContent = activeUser.role === 'ADMIN' ? 'Administrador' : (activeUser.role === 'ORGANIZER' ? 'Organizador (Docente)' : 'Discente');
+            document.getElementById('sb-user-role').textContent = activeUser.role === 'ADMIN'
+                ? 'Administrador' : (activeUser.role === 'ORGANIZER'
+                    ? 'Organizador (Docente)' : (activeUser.role === 'PARTICIPANT' ? 'Participante' : 'Visitante'));
             const initials = activeUser.name.split(' ').map(n => n[0]).slice(0, 2).join('');
             document.getElementById('sb-user-avatar').textContent = initials;
             document.getElementById('modal-avatar').textContent = initials;
@@ -1707,6 +1839,8 @@
             document.getElementById('modal-user-role').textContent = activeUser.role;
 
             const isTeacher = activeUser.role === 'ORGANIZER' || activeUser.role === 'ADMIN';
+            document.getElementById('nav-agenda').style.display = activeUser.id ? 'flex' : 'none';
+            document.getElementById('nav-cert').style.display = activeUser.id ? 'flex' : 'none';
             document.getElementById('widget-teacher-box').style.display = isTeacher ? 'block' : 'none';
             document.getElementById('docente-section-title').style.display = isTeacher ? 'block' : 'none';
             document.getElementById('nav-admin').style.display = isTeacher ? 'flex' : 'none';
@@ -1903,15 +2037,27 @@
 
         // ACTIONS: AGENDA
         async function addToAgenda(actId) {
+            if (!activeUser.id) {
+                openAuthModal();
+                return;
+            }
             try {
-                const res = await fetch(`/api/registrations/${currentEventId}/activities/${actId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: activeUser.id })
-                });
+                const existingRegistration = userRegs.find(r => r.eventId === currentEventId && r.status === 'CONFIRMED');
+                const res = existingRegistration
+                    ? await apiFetch(`/api/registrations/${currentEventId}/activities/${actId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}'
+                    })
+                    : await apiFetch('/api/registrations', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ eventId: currentEventId, activityIds: [actId] })
+                    });
                 if (res.ok) {
                     await loadData();
                     updateUI();
+                    if (!existingRegistration) alert('Inscrição no evento confirmada e atividade adicionada à agenda.');
                 } else {
                     const err = await res.json();
                     alert("Aviso de Conflito/Inscrição: " + (err.error || "Não foi possível adicionar."));
@@ -1923,7 +2069,7 @@
 
         async function removeFromAgenda(actId) {
             try {
-                const res = await fetch(`/api/registrations/${currentEventId}/activities/${actId}?userId=${activeUser.id}`, {
+                const res = await apiFetch(`/api/registrations/${currentEventId}/activities/${actId}`, {
                     method: 'DELETE'
                 });
                 if (res.ok) {
@@ -1935,8 +2081,31 @@
             }
         }
 
+        async function cancelEventRegistration() {
+            if (!activeUser.id || !confirm('Deseja cancelar sua inscrição neste evento? As vagas das atividades serão liberadas.')) {
+                return;
+            }
+            const res = await apiFetch(`/api/registrations/${currentEventId}/cancel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}'
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || 'Não foi possível cancelar a inscrição.');
+                return;
+            }
+            await loadData();
+            updateUI();
+            alert(data.message || 'Inscrição cancelada.');
+        }
+
         // ATTENDANCE HANDLING
         function handleAttendanceClick() {
+            if (!activeUser.id) {
+                openAuthModal();
+                return;
+            }
             const isTeacher = activeUser.role === 'ORGANIZER' || activeUser.role === 'ADMIN';
             if (isTeacher) {
                 openTeacherProjectorModal();
@@ -1962,12 +2131,12 @@
                 document.getElementById('projector-act-title').textContent = act.title;
             }
             try {
-                const res = await fetch(`/api/attendance/qr/generate/${actId}`);
+                const res = await apiFetch(`/api/attendance/qr/generate/${actId}`);
                 if (res.ok) {
                     const data = await res.json();
-                    currentProjectorToken = data.token;
-                    document.getElementById('projector-token-text').textContent = `Token: ${data.token}`;
-                    document.getElementById('projector-qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.token)}`;
+                    currentProjectorToken = data.qrToken;
+                    document.getElementById('projector-token-text').textContent = `Token: ${data.qrToken}`;
+                    document.getElementById('projector-qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.qrToken)}`;
                 }
             } catch (err) {
                 console.error("Erro ao gerar QR Token do docente:", err);
@@ -1982,11 +2151,6 @@
         function syncStudentToken() {
             if (currentProjectorToken) {
                 document.getElementById('student-token-input').value = currentProjectorToken;
-            } else {
-                const actId = document.getElementById('student-scan-act').value;
-                fetch(`/api/attendance/qr/generate/${actId}`).then(r => r.json()).then(d => {
-                    document.getElementById('student-token-input').value = d.token;
-                }).catch(() => {});
             }
         }
 
@@ -1999,7 +2163,7 @@
             }
 
             try {
-                const res = await fetch('/api/attendance/qr/scan', {
+                const res = await apiFetch('/api/attendance/qr/scan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -2027,14 +2191,13 @@
             const just = document.getElementById('adm-manual-just').value;
 
             try {
-                const res = await fetch('/api/attendance/manual', {
+                const res = await apiFetch('/api/attendance/manual', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         userId: parseInt(uid),
                         activityId: parseInt(aid),
-                        organizerId: activeUser.id,
-                        justification: just
+                        notes: just
                     })
                 });
                 if (res.ok) {
@@ -2050,8 +2213,12 @@
 
         // CERTIFICATES
         async function issueCertificate() {
+            if (!activeUser.id) {
+                openAuthModal();
+                return;
+            }
             try {
-                const res = await fetch(`/api/certificates/issue/${currentEventId}/${activeUser.id}`, { method: 'POST' });
+                const res = await apiFetch(`/api/certificates/issue/${currentEventId}/${activeUser.id}`, { method: 'POST' });
                 if (res.ok) {
                     alert("Certificado emitido e assinado digitalmente!");
                     renderCertificates();
@@ -2066,8 +2233,12 @@
 
         async function renderCertificates() {
             const wrap = document.getElementById('cert-list-wrap');
+            if (!activeUser.id) {
+                wrap.innerHTML = '<span style="font-size:13px; color:var(--text-muted);">Entre para consultar seus certificados.</span>';
+                return;
+            }
             try {
-                const res = await fetch(`/api/certificates/user/${activeUser.id}`);
+                const res = await apiFetch(`/api/certificates/user/${activeUser.id}`);
                 if (res.ok) {
                     const certs = await res.json();
                     if (certs.length === 0) {
@@ -2078,13 +2249,13 @@
                         <div class="cert-card">
                             <div class="cert-title">${c.eventTitle}</div>
                             <p style="font-size:13px; color:var(--text-body); margin-top:4px;">
-                                Participante: <strong>${activeUser.name}</strong> • Carga Horária: <strong>${c.workloadHours} horas</strong>
+                                Participante: <strong>${activeUser.name}</strong> • Carga Horária: <strong>${c.completionHours} horas</strong>
                             </p>
                             <div class="cert-code mono">Autenticidade: ${c.verificationCode}</div>
                             <div style="margin-top:12px;">
-                                <a href="/api/certificates/download/${c.id}" class="btn-action btn-primary" style="font-size:12px; padding:6px 12px;" download>
+                                <button onclick="downloadCertificate(${c.id})" class="btn-action btn-primary" style="font-size:12px; padding:6px 12px;">
                                     Baixar PDF Oficial
-                                </a>
+                                </button>
                             </div>
                         </div>
                     `).join('');
@@ -2100,14 +2271,14 @@
             if (!code) return;
 
             try {
-                const res = await fetch(`/api/certificates/verify/${code}`);
+                const res = await apiFetch(`/api/certificates/verify/${code}`);
                 if (res.ok) {
                     const data = await res.json();
                     resWrap.innerHTML = `
                         <div style="background:var(--success-subtle); border:1px solid var(--success-border); padding:12px; border-radius:var(--radius-md);">
                             <div style="color:var(--success-fg); font-weight:700; font-size:13px;">Certificado Autêntico e Válido</div>
                             <div style="font-size:12px; color:var(--text-body); margin-top:4px;">
-                                Titular: <strong>${data.participantName}</strong> • Evento: <strong>${data.eventTitle}</strong> (${data.workloadHours}h)
+                                Titular: <strong>${data.participantName}</strong> • Evento: <strong>${data.eventTitle}</strong> (${data.completionHours}h)
                             </div>
                         </div>
                     `;
@@ -2121,6 +2292,21 @@
             } catch (err) {
                 alert("Erro ao validar código.");
             }
+        }
+
+        async function downloadCertificate(id) {
+            const res = await apiFetch(`/api/certificates/download/${id}`);
+            if (!res.ok) {
+                alert('Não foi possível baixar o certificado.');
+                return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `certificado_${id}.pdf`;
+            link.click();
+            URL.revokeObjectURL(url);
         }
 
         // CREATE ADMIN ACTIVITY
@@ -2137,19 +2323,19 @@
             if (!title) { alert("Informe o título da atividade."); return; }
 
             try {
-                const res = await fetch(`/api/events/${currentEventId}/activities`, {
+                const res = await apiFetch(`/api/events/${currentEventId}/activities`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: title,
                         description: desc,
                         room: room,
-                        spaceOrTrack: track,
-                        startTime: start + ':00',
-                        endTime: end + ':00',
+                        track: track,
+                        start: start + ':00',
+                        end: end + ':00',
                         capacity: cap,
                         type: type,
-                        attendancePolicyKey: 'SINGLE_CHECKIN'
+                        attendancePolicy: 'SINGLE_CHECKIN'
                     })
                 });
                 if (res.ok) {
@@ -2182,23 +2368,118 @@
         }
 
         // MODALS
-        function openProfileModal() { document.getElementById('modal-profile').classList.add('active'); }
-        function openFeedbackModal() { document.getElementById('modal-feedback').classList.add('active'); }
+        function openProfileModal() {
+            if (!activeUser.id) {
+                openAuthModal();
+                return;
+            }
+            document.getElementById('profile-name-input').value = activeUser.name;
+            document.getElementById('modal-profile').classList.add('active');
+        }
+
+        async function openFeedbackModal(activityId) {
+            if (!activeUser.id) {
+                openAuthModal();
+                return;
+            }
+            currentFeedbackActivityId = activityId || (activities.length ? activities[0].id : null);
+            if (!currentFeedbackActivityId) {
+                alert('Não há atividade disponível para avaliação.');
+                return;
+            }
+            try {
+                const eligibility = await apiFetch(`/api/surveys/activity/${currentFeedbackActivityId}/can-evaluate/${activeUser.id}`);
+                const eligibilityData = await eligibility.json();
+                if (!eligibility.ok || !eligibilityData.canEvaluate) {
+                    throw new Error(eligibilityData.error || 'Você precisa estar inscrito e presente para avaliar esta atividade.');
+                }
+                const res = await apiFetch(`/api/surveys/activity/${currentFeedbackActivityId}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Questionário indisponível.');
+                currentSurvey = data;
+                document.getElementById('feedback-questions').innerHTML = (data.questions || []).map(question => {
+                    const required = question.required ? 'required' : '';
+                    if (question.type === 'RATING_SCALE') {
+                        return `<label class="form-label">${question.questionText}</label>
+                            <select class="form-select feedback-answer" data-question-id="${question.id}" ${required}>
+                                <option value="">Selecione</option>
+                                <option value="5">5 - Excelente</option><option value="4">4 - Muito bom</option>
+                                <option value="3">3 - Regular</option><option value="2">2 - Insatisfatório</option>
+                                <option value="1">1 - Ruim</option>
+                            </select>`;
+                    }
+                    if (question.type === 'SINGLE_CHOICE') {
+                        return `<label class="form-label">${question.questionText}</label>
+                            <select class="form-select feedback-answer" data-question-id="${question.id}" ${required}>
+                                <option value="">Selecione</option>
+                                ${(question.options || []).map(option => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('')}
+                            </select>`;
+                    }
+                    return `<label class="form-label">${question.questionText}</label>
+                        <textarea class="form-textarea feedback-answer" data-question-id="${question.id}" ${required}></textarea>`;
+                }).join('');
+                document.getElementById('modal-feedback').classList.add('active');
+            } catch (error) {
+                alert(error.message);
+            }
+        }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-        function saveProfileName() {
+        async function saveProfileName() {
             const newName = document.getElementById('profile-name-input').value.trim();
             if (newName) {
-                activeUser.name = newName;
+                const res = await apiFetch(`/api/users/${activeUser.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.error || 'Não foi possível atualizar o perfil.');
+                    return;
+                }
+                activeUser = data;
+                localStorage.setItem('eventos_user', JSON.stringify(activeUser));
                 updateSidebarAndRole();
-                alert("Nome atualizado com sucesso!");
+                alert('Nome atualizado e persistido com sucesso.');
                 closeModal('modal-profile');
             }
         }
 
-        function submitFeedback() {
-            alert("Feedback enviado com sucesso!");
+        async function submitFeedback() {
+            if (!currentSurvey) return;
+            const answers = {};
+            for (const field of document.querySelectorAll('.feedback-answer')) {
+                if (field.required && !field.value.trim()) {
+                    alert('Responda todas as perguntas obrigatórias.');
+                    return;
+                }
+                answers[field.dataset.questionId] = field.value;
+            }
+            const res = await apiFetch('/api/surveys/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    surveyId: currentSurvey.id,
+                    activityId: currentFeedbackActivityId,
+                    anonymous: false,
+                    answers
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || 'Não foi possível enviar a avaliação.');
+                return;
+            }
+            alert('Feedback enviado com sucesso.');
             closeModal('modal-feedback');
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
         }
     </script>
 </body>

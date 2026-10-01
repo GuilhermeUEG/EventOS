@@ -13,6 +13,7 @@ import com.eventos.domain.model.Registration;
 import com.eventos.domain.model.RegistrationStatus;
 import com.eventos.domain.services.ConflictValidator;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -45,6 +46,15 @@ public class RegistrationServiceImpl implements RegistrationUseCase {
         if (!event.isEnrollmentOpen()) {
             throw new BusinessRuleException("As inscrições para este evento estão fechadas (" + event.getStatus().getDescription() + ").");
         }
+        if (!event.isRegistrationWithinDeadline(LocalDateTime.now(ZoneId.of(event.getTimeZone())))) {
+            throw new BusinessRuleException("O prazo de inscrição deste evento foi encerrado.");
+        }
+        if (event.isActivitySelectionRequired() && (activityIds == null || activityIds.isEmpty())) {
+            throw new BusinessRuleException("Selecione ao menos uma atividade para concluir a inscrição.");
+        }
+        if (!event.isActivitySelectionEnabled() && activityIds != null && !activityIds.isEmpty()) {
+            throw new BusinessRuleException("Este evento não permite escolha individual de atividades.");
+        }
 
         // Verifica capacidade do evento
         int confirmedCount = registrationRepository.countConfirmedByEventId(eventId);
@@ -61,19 +71,27 @@ public class RegistrationServiceImpl implements RegistrationUseCase {
         if (activityIds != null && !activityIds.isEmpty()) {
             List<Activity> chosenActivities = new ArrayList<>();
             for (Long actId : activityIds) {
+                if (selected.contains(actId)) continue;
                 Activity act = activityRepository.findById(actId)
                         .orElseThrow(() -> new EntityNotFoundException("Atividade com ID " + actId + " não encontrada."));
+                if (!eventId.equals(act.getEventId())) {
+                    throw new BusinessRuleException("A atividade '" + act.getTitle() + "' não pertence ao evento informado.");
+                }
                 
                 // Valida conflito com outras selecionadas
                 ConflictValidator.validateParticipantAgendaConflict(act, chosenActivities);
-                
-                // Reserva vaga se necessário
+                if (act.isRequiresRegistration() && !act.hasAvailableSlots()) {
+                    throw new BusinessRuleException("A atividade '" + act.getTitle() + "' não possui vagas disponíveis.");
+                }
+                chosenActivities.add(act);
+                selected.add(act.getId());
+            }
+            // Só altera contadores depois que todo o conjunto foi validado.
+            for (Activity act : chosenActivities) {
                 if (act.isRequiresRegistration()) {
                     act.bookSlot();
                     activityRepository.updateEnrollments(act.getId(), act.getCurrentEnrollments());
                 }
-                chosenActivities.add(act);
-                selected.add(act.getId());
             }
         }
 
@@ -84,11 +102,22 @@ public class RegistrationServiceImpl implements RegistrationUseCase {
 
     @Override
     public Registration addActivityToRegistration(Long eventId, Long userId, Long activityId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Evento não encontrado."));
+        if (!event.isActivitySelectionEnabled()) {
+            throw new BusinessRuleException("Este evento não permite escolha individual de atividades.");
+        }
         Registration reg = registrationRepository.findByEventAndUser(eventId, userId)
                 .orElseThrow(() -> new BusinessRuleException("Você precisa primeiro se inscrever no evento antes de escolher atividades."));
 
         Activity target = activityRepository.findById(activityId)
                 .orElseThrow(() -> new EntityNotFoundException("Atividade não encontrada."));
+        if (!eventId.equals(target.getEventId())) {
+            throw new BusinessRuleException("A atividade não pertence ao evento informado.");
+        }
+        if (reg.getSelectedActivityIds().contains(activityId)) {
+            return reg;
+        }
 
         List<Activity> currentAgenda = getParticipantAgenda(userId, eventId);
         ConflictValidator.validateParticipantAgendaConflict(target, currentAgenda);
@@ -106,6 +135,9 @@ public class RegistrationServiceImpl implements RegistrationUseCase {
     public Registration removeActivityFromRegistration(Long eventId, Long userId, Long activityId) {
         Registration reg = registrationRepository.findByEventAndUser(eventId, userId)
                 .orElseThrow(() -> new EntityNotFoundException("Inscrição não encontrada."));
+        if (!reg.getSelectedActivityIds().contains(activityId)) {
+            return reg;
+        }
 
         Activity target = activityRepository.findById(activityId).orElse(null);
         if (target != null && target.isRequiresRegistration()) {
@@ -119,6 +151,11 @@ public class RegistrationServiceImpl implements RegistrationUseCase {
 
     @Override
     public void cancelRegistration(Long eventId, Long userId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new EntityNotFoundException("Evento não encontrado."));
+        if (!event.isRegistrationWithinDeadline(LocalDateTime.now(ZoneId.of(event.getTimeZone())))) {
+            throw new BusinessRuleException("O prazo para cancelamento da inscrição foi encerrado.");
+        }
         Registration reg = registrationRepository.findByEventAndUser(eventId, userId)
                 .orElseThrow(() -> new EntityNotFoundException("Inscrição não encontrada."));
         

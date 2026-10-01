@@ -1,6 +1,6 @@
 package com.eventos.adapters.output.persistence;
 
-import com.eventos.adapters.output.security.Sha256SecurityAdapter;
+import com.eventos.adapters.output.security.Pbkdf2SecurityAdapter;
 import com.eventos.domain.model.Activity;
 import com.eventos.domain.model.ActivityLocation;
 import com.eventos.domain.model.ActivityType;
@@ -19,6 +19,7 @@ import com.eventos.domain.policies.MinimumAttendancePercentagePolicy;
 import com.eventos.domain.policies.SingleCheckInPolicy;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -32,13 +33,26 @@ public class DatabaseSeeder {
                                    JdbcRegistrationRepository regRepo,
                                    JdbcAttendanceRepository attRepo,
                                    JdbcSurveyRepository surveyRepo) {
+        Pbkdf2SecurityAdapter sec = new Pbkdf2SecurityAdapter();
         if (!userRepo.findAll().isEmpty()) {
-            System.out.println("Base de dados ja contem registros. Povoamento ignorado.");
-            return;
+            // As contas abaixo são exclusivamente de demonstração. Mantê-las previsíveis
+            // torna o roteiro reproduzível mesmo após migração de hashes antigos.
+            refreshDemoPassword(userRepo, sec, "marcio.giovane@universidade.edu.br", "marcio123");
+            refreshDemoPassword(userRepo, sec, "joilson.brito@universidade.edu.br", "joilson123");
+            refreshDemoPassword(userRepo, sec, "guiliano.rangel@universidade.edu.br", "guiliano123");
+            refreshDemoPassword(userRepo, sec, "juliana.braga@universidade.edu.br", "juliana123");
+            refreshDemoPassword(userRepo, sec, "guilherme.barbosa@aluno.edu.br", "gui123");
+            refreshDemoPassword(userRepo, sec, "murilo.mendes@aluno.edu.br", "murilo123");
+            refreshDemoPassword(userRepo, sec, "danielly.mendes@aluno.edu.br", "dani123");
+            refreshDemoPassword(userRepo, sec, "samir.santana@aluno.edu.br", "samir123");
+
+            if (userRepo.findByEmail(new Email("guilherme.barbosa@aluno.edu.br")).isPresent()) {
+                System.out.println("Base existente migrada; credenciais de demonstracao atualizadas.");
+                return;
+            }
         }
 
         System.out.println("Iniciando povoamento de dados reais de POO II...");
-        Sha256SecurityAdapter sec = new Sha256SecurityAdapter();
 
         // 1. Professores (Organizadores e Administradores)
         User profMarcio = userRepo.save(new User(null, "Prof. Marcio Giovane", new Email("marcio.giovane@universidade.edu.br"), sec.hashPassword("marcio123"), UserRole.ORGANIZER, LocalDateTime.now()));
@@ -151,5 +165,14 @@ public class DatabaseSeeder {
                 LocalDateTime.now().minusHours(2), com.eventos.domain.model.AttendanceType.CHECK_IN, "QR_SCAN", "Presenca validada via QR Code"));
 
         System.out.println("Povoamento de dados de POO II concluido com sucesso!");
+    }
+
+    private static void refreshDemoPassword(JdbcUserRepository userRepo, Pbkdf2SecurityAdapter security,
+                                            String email, String password) {
+        Optional<User> existing = userRepo.findByEmail(new Email(email));
+        if (existing.isEmpty()) return;
+        User user = existing.get();
+        user.changePassword(security.hashPassword(password));
+        userRepo.save(user);
     }
 }

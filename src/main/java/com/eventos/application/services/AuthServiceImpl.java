@@ -40,6 +40,10 @@ public class AuthServiceImpl implements AuthUseCase {
         if (!securityPort.verifyPassword(password, user.getPasswordHash())) {
             throw new UnauthorizedException("Credenciais inválidas. E-mail ou senha incorretos.");
         }
+        if (securityPort.needsRehash(user.getPasswordHash())) {
+            user.changePassword(securityPort.hashPassword(password));
+            user = userRepository.save(user);
+        }
         return user;
     }
 

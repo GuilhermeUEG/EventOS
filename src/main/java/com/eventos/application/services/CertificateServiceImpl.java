@@ -68,7 +68,9 @@ public class CertificateServiceImpl implements CertificateUseCase {
         List<Activity> eventActivities = activityRepository.findByEventId(eventId);
         int totalActivitiesAttended = 0;
         double totalHoursAttended = 0.0;
-        double totalEventHours = event.calculateTotalHours();
+        double totalEventHours = eventActivities.stream()
+                .mapToDouble(activity -> activity.getPeriod().getDurationHours())
+                .sum();
 
         for (Activity act : eventActivities) {
             List<AttendanceRecord> records = attendanceRepository.findByActivityAndUser(act.getId(), userId);
@@ -95,6 +97,12 @@ public class CertificateServiceImpl implements CertificateUseCase {
     }
 
     @Override
+    public Certificate getCertificateById(Long id) {
+        return certificateRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Certificado não encontrado."));
+    }
+
+    @Override
     public Certificate getCertificateByVerificationCode(String code) {
         return certificateRepository.findByVerificationCode(code)
                 .orElseThrow(() -> new EntityNotFoundException("Certificado com código '" + code + "' não foi encontrado."));
@@ -107,8 +115,7 @@ public class CertificateServiceImpl implements CertificateUseCase {
 
     @Override
     public byte[] exportCertificatePdf(Long certificateId) {
-        Certificate cert = certificateRepository.findById(certificateId)
-                .orElseThrow(() -> new EntityNotFoundException("Certificado não encontrado."));
+        Certificate cert = getCertificateById(certificateId);
         return pdfGeneratorPort.generateCertificatePdf(cert);
     }
 }

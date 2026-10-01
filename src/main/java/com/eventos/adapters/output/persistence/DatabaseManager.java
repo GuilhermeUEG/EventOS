@@ -43,9 +43,18 @@ public class DatabaseManager {
                     organizer_id BIGINT,
                     max_capacity INT NOT NULL DEFAULT 500,
                     cert_policy_type VARCHAR(50),
-                    cert_policy_param DOUBLE
+                    cert_policy_param DOUBLE,
+                    activity_selection_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    activity_selection_required BOOLEAN NOT NULL DEFAULT FALSE,
+                    registration_deadline TIMESTAMP,
+                    time_zone VARCHAR(100) NOT NULL DEFAULT 'America/Sao_Paulo'
                 );
             """);
+            // Migração incremental para bancos criados por versões anteriores.
+            stmt.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS activity_selection_enabled BOOLEAN NOT NULL DEFAULT TRUE");
+            stmt.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS activity_selection_required BOOLEAN NOT NULL DEFAULT FALSE");
+            stmt.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS registration_deadline TIMESTAMP");
+            stmt.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS time_zone VARCHAR(100) NOT NULL DEFAULT 'America/Sao_Paulo'");
 
             // Activities table
             stmt.execute("""

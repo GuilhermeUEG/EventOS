@@ -16,6 +16,9 @@ import com.eventos.domain.model.AttendanceStatus;
 import com.eventos.domain.model.AttendanceType;
 import com.eventos.domain.model.Registration;
 import com.eventos.domain.model.User;
+import com.eventos.domain.policies.CheckInCheckOutPolicy;
+import com.eventos.domain.policies.ManualOnlyPolicy;
+import com.eventos.domain.policies.SingleCheckInPolicy;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,13 +66,33 @@ public class AttendanceServiceImpl implements AttendanceUseCase {
         if (regOpt.isEmpty() || !regOpt.get().isConfirmed()) {
             throw new BusinessRuleException("Você precisa estar inscrito no evento para registrar frequência nesta atividade.");
         }
+        if (activity.isRequiresRegistration()
+                && !regOpt.get().getSelectedActivityIds().contains(activityId)) {
+            throw new BusinessRuleException("Você precisa estar inscrito nesta atividade para registrar frequência.");
+        }
+        if (activity.getAttendancePolicy() instanceof ManualOnlyPolicy) {
+            throw new BusinessRuleException("Esta atividade aceita somente validação manual de frequência.");
+        }
 
         List<AttendanceRecord> existing = attendanceRepository.findByActivityAndUser(activityId, userId);
-        
+
+        if (activity.getAttendancePolicy() instanceof SingleCheckInPolicy) {
+            Optional<AttendanceRecord> previousCheckIn = existing.stream()
+                    .filter(r -> r.getType() == AttendanceType.CHECK_IN)
+                    .findFirst();
+            if (previousCheckIn.isPresent()) {
+                return previousCheckIn.get();
+            }
+        }
+
         // Determina tipo: se política for Entrada/Saída e já tem CHECK_IN, marca CHECK_OUT
         AttendanceType markType = AttendanceType.CHECK_IN;
-        if (activity.getAttendancePolicy() instanceof com.eventos.domain.policies.CheckInCheckOutPolicy) {
+        if (activity.getAttendancePolicy() instanceof CheckInCheckOutPolicy) {
             boolean hasIn = existing.stream().anyMatch(r -> r.getType() == AttendanceType.CHECK_IN);
+            boolean hasOut = existing.stream().anyMatch(r -> r.getType() == AttendanceType.CHECK_OUT);
+            if (hasIn && hasOut) {
+                throw new BusinessRuleException("A entrada e a saída já foram registradas para esta atividade.");
+            }
             if (hasIn) {
                 markType = AttendanceType.CHECK_OUT;
             }

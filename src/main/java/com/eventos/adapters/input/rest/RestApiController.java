@@ -1,5 +1,6 @@
 package com.eventos.adapters.input.rest;
 
+import com.eventos.application.auth.AuthenticatedSession;
 import com.eventos.application.dtos.AttendanceReportDto;
 import com.eventos.application.dtos.EnrolledReportDto;
 import com.eventos.application.dtos.SurveyResultsDto;
@@ -10,6 +11,7 @@ import com.eventos.application.ports.input.EventUseCase;
 import com.eventos.application.ports.input.RegistrationUseCase;
 import com.eventos.application.ports.input.ReportUseCase;
 import com.eventos.application.ports.input.SurveyUseCase;
+import com.eventos.application.ports.output.SessionStore;
 import com.eventos.domain.exceptions.DomainException;
 import com.eventos.domain.exceptions.EntityNotFoundException;
 import com.eventos.domain.exceptions.UnauthorizedException;
@@ -57,6 +59,8 @@ public class RestApiController {
     private final SurveyUseCase surveyUseCase;
     private final CertificateUseCase certificateUseCase;
     private final ReportUseCase reportUseCase;
+    private final SessionStore sessionStore;
+    private final AuthorizationHandler authorization;
 
     private static final DateTimeFormatter ISO_FMT = DateTimeFormatter.ISO_DATE_TIME;
 
@@ -67,6 +71,7 @@ public class RestApiController {
                              SurveyUseCase surveyUseCase,
                              CertificateUseCase certificateUseCase,
                              ReportUseCase reportUseCase,
+                             SessionStore sessionStore,
                              Javalin app) {
         this.authUseCase = authUseCase;
         this.eventUseCase = eventUseCase;
@@ -75,6 +80,8 @@ public class RestApiController {
         this.surveyUseCase = surveyUseCase;
         this.certificateUseCase = certificateUseCase;
         this.reportUseCase = reportUseCase;
+        this.sessionStore = sessionStore;
+        this.authorization = new AuthorizationHandler(sessionStore);
 
         setupRoutes(app);
     }
@@ -97,6 +104,7 @@ public class RestApiController {
         // 1. Auth & User
         app.post("/api/auth/register", this::register);
         app.post("/api/auth/login", this::login);
+        app.post("/api/auth/logout", this::logout);
         app.get("/api/users", this::listUsers);
         app.get("/api/users/{id}", this::getUser);
         app.put("/api/users/{id}", this::updateUser);
@@ -108,6 +116,7 @@ public class RestApiController {
         app.put("/api/events/{id}", this::updateEvent);
         app.post("/api/events/{id}/publish", this::publishEvent);
         app.post("/api/events/{id}/cancel", this::cancelEvent);
+        app.post("/api/events/{id}/finish", this::finishEvent);
         app.get("/api/events/{id}/activities", this::listActivities);
         app.post("/api/events/{id}/activities", this::addActivity);
         app.get("/api/activities/{id}", this::getActivity);
@@ -153,32 +162,40 @@ public class RestApiController {
         String name = body.get("name");
         String email = body.get("email");
         String password = body.get("password");
-        String roleStr = body.getOrDefault("role", "PARTICIPANT");
-        UserRole role = UserRole.valueOf(roleStr.toUpperCase());
-
-        User user = authUseCase.register(name, email, password, role);
-        ctx.status(HttpStatus.CREATED).json(sanitizeUser(user));
+        User user = authUseCase.register(name, email, password, UserRole.PARTICIPANT);
+        AuthenticatedSession session = sessionStore.create(user);
+        ctx.status(HttpStatus.CREATED).json(authResponse(user, session));
     }
 
     private void login(Context ctx) {
         Map<String, String> body = ctx.bodyAsClass(Map.class);
         User user = authUseCase.login(body.get("email"), body.get("password"));
-        ctx.json(sanitizeUser(user));
+        AuthenticatedSession session = sessionStore.create(user);
+        ctx.json(authResponse(user, session));
+    }
+
+    private void logout(Context ctx) {
+        authorization.requireAuthenticated(ctx);
+        sessionStore.revoke(authorization.extractBearerToken(ctx));
+        ctx.status(HttpStatus.NO_CONTENT);
     }
 
     private void listUsers(Context ctx) {
+        authorization.requireRole(ctx, UserRole.ADMIN, UserRole.ORGANIZER);
         List<User> list = authUseCase.listUsers();
         ctx.json(list.stream().map(this::sanitizeUser).toList());
     }
 
     private void getUser(Context ctx) {
         Long id = Long.parseLong(ctx.pathParam("id"));
+        authorization.requireSelfOrStaff(ctx, id);
         User user = authUseCase.getUserById(id);
         ctx.json(sanitizeUser(user));
     }
 
     private void updateUser(Context ctx) {
         Long id = Long.parseLong(ctx.pathParam("id"));
+        authorization.requireSelfOrStaff(ctx, id);
         Map<String, String> body = ctx.bodyAsClass(Map.class);
         User updated = authUseCase.updateProfile(id, body.get("name"));
         ctx.json(sanitizeUser(updated));
@@ -192,7 +209,12 @@ public class RestApiController {
         String statusStr = ctx.queryParam("status");
 
         ActivityType type = (typeStr != null && !typeStr.isEmpty()) ? ActivityType.valueOf(typeStr.toUpperCase()) : null;
-        EventStatus status = (statusStr != null && !statusStr.isEmpty()) ? EventStatus.valueOf(statusStr.toUpperCase()) : null;
+        boolean staff = authorization.findSession(ctx)
+                .map(s -> s.hasAnyRole(UserRole.ADMIN, UserRole.ORGANIZER))
+                .orElse(false);
+        EventStatus status = (statusStr != null && !statusStr.isEmpty())
+                ? EventStatus.valueOf(statusStr.toUpperCase())
+                : (staff ? null : EventStatus.PUBLISHED);
 
         List<Event> events = eventUseCase.filterEvents(search, track, type, status);
         ctx.json(events);
@@ -201,17 +223,21 @@ public class RestApiController {
     private void getEvent(Context ctx) {
         Long id = Long.parseLong(ctx.pathParam("id"));
         Event event = eventUseCase.getEvent(id);
+        if (event.getStatus() != EventStatus.PUBLISHED && event.getStatus() != EventStatus.IN_PROGRESS) {
+            authorization.requireRole(ctx, UserRole.ADMIN, UserRole.ORGANIZER);
+        }
         ctx.json(event);
     }
 
     private void createEvent(Context ctx) {
+        AuthenticatedSession session = authorization.requireRole(ctx, UserRole.ADMIN, UserRole.ORGANIZER);
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         String title = (String) body.get("title");
         String description = (String) body.get("description");
         LocalDateTime start = parseDateTime((String) body.get("start"));
         LocalDateTime end = parseDateTime((String) body.get("end"));
         int capacity = body.containsKey("maxCapacity") ? ((Number) body.get("maxCapacity")).intValue() : 500;
-        Long orgId = body.containsKey("organizerId") && body.get("organizerId") != null ? ((Number) body.get("organizerId")).longValue() : null;
+        Long orgId = session.userId();
 
         String polType = (String) body.getOrDefault("certPolicyType", "MIN_PERCENTAGE");
         double polParam = body.containsKey("certPolicyParam") ? ((Number) body.get("certPolicyParam")).doubleValue() : 75.0;
@@ -220,12 +246,19 @@ public class RestApiController {
                 : new MinimumAttendancePercentagePolicy(polParam);
 
         Event event = new Event(null, title, description, new Period(start, end), EventStatus.DRAFT, orgId, new ArrayList<>(), capacity, policy);
+        event.configureRegistration(
+                booleanValue(body, "activitySelectionEnabled", true),
+                booleanValue(body, "activitySelectionRequired", false),
+                body.get("registrationDeadline") instanceof String deadline && !deadline.isBlank()
+                        ? parseDateTime(deadline) : start,
+                stringValue(body, "timeZone", "America/Sao_Paulo"));
         Event saved = eventUseCase.createEvent(event);
         ctx.status(HttpStatus.CREATED).json(saved);
     }
 
     private void updateEvent(Context ctx) {
         Long id = Long.parseLong(ctx.pathParam("id"));
+        requireEventManager(ctx, id);
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         Event existing = eventUseCase.getEvent(id);
 
@@ -236,30 +269,49 @@ public class RestApiController {
         int capacity = body.containsKey("maxCapacity") ? ((Number) body.get("maxCapacity")).intValue() : existing.getMaxCapacity();
 
         existing.updateDetails(title, description, new Period(start, end), capacity);
+        existing.configureRegistration(
+                booleanValue(body, "activitySelectionEnabled", existing.isActivitySelectionEnabled()),
+                booleanValue(body, "activitySelectionRequired", existing.isActivitySelectionRequired()),
+                body.get("registrationDeadline") instanceof String deadline && !deadline.isBlank()
+                        ? parseDateTime(deadline) : existing.getRegistrationDeadline(),
+                stringValue(body, "timeZone", existing.getTimeZone()));
         Event updated = eventUseCase.updateEvent(existing);
         ctx.json(updated);
     }
 
     private void publishEvent(Context ctx) {
         Long id = Long.parseLong(ctx.pathParam("id"));
+        requireEventManager(ctx, id);
         Event published = eventUseCase.publishEvent(id);
         ctx.json(published);
     }
 
     private void cancelEvent(Context ctx) {
         Long id = Long.parseLong(ctx.pathParam("id"));
+        requireEventManager(ctx, id);
         Event cancelled = eventUseCase.cancelEvent(id);
         ctx.json(cancelled);
     }
 
+    private void finishEvent(Context ctx) {
+        Long id = Long.parseLong(ctx.pathParam("id"));
+        requireEventManager(ctx, id);
+        ctx.json(eventUseCase.finishEvent(id));
+    }
+
     private void listActivities(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("id"));
+        Event event = eventUseCase.getEvent(eventId);
+        if (event.getStatus() != EventStatus.PUBLISHED && event.getStatus() != EventStatus.IN_PROGRESS) {
+            requireEventManager(ctx, eventId);
+        }
         List<Activity> list = eventUseCase.getEventActivities(eventId);
         ctx.json(list);
     }
 
     private void addActivity(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("id"));
+        requireEventManager(ctx, eventId);
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
 
         String title = (String) body.get("title");
@@ -299,14 +351,19 @@ public class RestApiController {
     private void getActivity(Context ctx) {
         Long id = Long.parseLong(ctx.pathParam("id"));
         Activity activity = eventUseCase.getActivity(id);
+        Event event = eventUseCase.getEvent(activity.getEventId());
+        if (event.getStatus() != EventStatus.PUBLISHED && event.getStatus() != EventStatus.IN_PROGRESS) {
+            requireEventManager(ctx, event.getId());
+        }
         ctx.json(activity);
     }
 
     // --- 3. Registration Handlers ---
     private void registerForEvent(Context ctx) {
+        AuthenticatedSession session = authorization.requireAuthenticated(ctx);
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         Long eventId = ((Number) body.get("eventId")).longValue();
-        Long userId = ((Number) body.get("userId")).longValue();
+        Long userId = session.userId();
 
         Set<Long> acts = new HashSet<>();
         if (body.containsKey("activityIds") && body.get("activityIds") instanceof List<?> list) {
@@ -322,8 +379,7 @@ public class RestApiController {
     private void addActivityToRegistration(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
         Long activityId = Long.parseLong(ctx.pathParam("activityId"));
-        Map<String, Object> body = ctx.bodyAsClass(Map.class);
-        Long userId = ((Number) body.get("userId")).longValue();
+        Long userId = authorization.requireAuthenticated(ctx).userId();
 
         Registration reg = registrationUseCase.addActivityToRegistration(eventId, userId, activityId);
         ctx.json(reg);
@@ -332,7 +388,7 @@ public class RestApiController {
     private void removeActivityFromRegistration(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
         Long activityId = Long.parseLong(ctx.pathParam("activityId"));
-        Long userId = Long.parseLong(ctx.queryParam("userId"));
+        Long userId = authorization.requireAuthenticated(ctx).userId();
 
         Registration reg = registrationUseCase.removeActivityFromRegistration(eventId, userId, activityId);
         ctx.json(reg);
@@ -340,8 +396,7 @@ public class RestApiController {
 
     private void cancelRegistration(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
-        Map<String, Object> body = ctx.bodyAsClass(Map.class);
-        Long userId = ((Number) body.get("userId")).longValue();
+        Long userId = authorization.requireAuthenticated(ctx).userId();
 
         registrationUseCase.cancelRegistration(eventId, userId);
         ctx.json(Map.of("message", "Inscrição cancelada com sucesso."));
@@ -349,16 +404,19 @@ public class RestApiController {
 
     private void getEventRegistrations(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
+        requireEventManager(ctx, eventId);
         ctx.json(registrationUseCase.getEventRegistrations(eventId));
     }
 
     private void getUserRegistrations(Context ctx) {
         Long userId = Long.parseLong(ctx.pathParam("userId"));
+        authorization.requireSelfOrStaff(ctx, userId);
         ctx.json(registrationUseCase.getUserRegistrations(userId));
     }
 
     private void getParticipantAgenda(Context ctx) {
         Long userId = Long.parseLong(ctx.pathParam("userId"));
+        authorization.requireSelfOrStaff(ctx, userId);
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
         ctx.json(registrationUseCase.getParticipantAgenda(userId, eventId));
     }
@@ -366,14 +424,16 @@ public class RestApiController {
     // --- 4. Attendance Handlers ---
     private void generateQrToken(Context ctx) {
         Long activityId = Long.parseLong(ctx.pathParam("activityId"));
+        requireEventManager(ctx, eventUseCase.getActivity(activityId).getEventId());
         String token = attendanceUseCase.generateQrToken(activityId);
         ctx.json(Map.of("activityId", activityId, "qrToken", token));
     }
 
     private void recordQrAttendance(Context ctx) {
+        AuthenticatedSession session = authorization.requireAuthenticated(ctx);
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         String qrToken = (String) body.get("qrToken");
-        Long userId = ((Number) body.get("userId")).longValue();
+        Long userId = session.userId();
 
         AttendanceRecord record = attendanceUseCase.recordQrAttendance(qrToken, userId);
         ctx.status(HttpStatus.CREATED).json(record);
@@ -382,11 +442,13 @@ public class RestApiController {
     private void recordManualAttendance(Context ctx) {
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         Long activityId = ((Number) body.get("activityId")).longValue();
+        AuthenticatedSession session = requireEventManager(ctx, eventUseCase.getActivity(activityId).getEventId());
         Long userId = ((Number) body.get("userId")).longValue();
-        Long organizerId = ((Number) body.get("organizerId")).longValue();
+        Long organizerId = session.userId();
         String typeStr = (String) body.getOrDefault("type", "MANUAL_ENTRY");
         AttendanceType type = AttendanceType.valueOf(typeStr.toUpperCase());
-        String notes = (String) body.get("notes");
+        String notes = body.get("notes") instanceof String text
+                ? text : (String) body.get("justification");
 
         AttendanceRecord record = attendanceUseCase.recordManualAttendance(activityId, userId, organizerId, type, notes);
         ctx.status(HttpStatus.CREATED).json(record);
@@ -394,11 +456,13 @@ public class RestApiController {
 
     private void getActivityAttendanceRecords(Context ctx) {
         Long activityId = Long.parseLong(ctx.pathParam("activityId"));
+        requireEventManager(ctx, eventUseCase.getActivity(activityId).getEventId());
         ctx.json(attendanceUseCase.getActivityRecords(activityId));
     }
 
     private void getActivityAttendanceOverview(Context ctx) {
         Long activityId = Long.parseLong(ctx.pathParam("activityId"));
+        requireEventManager(ctx, eventUseCase.getActivity(activityId).getEventId());
         ctx.json(attendanceUseCase.getActivityAttendanceOverview(activityId));
     }
 
@@ -406,6 +470,7 @@ public class RestApiController {
     private void createSurvey(Context ctx) {
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         Long activityId = ((Number) body.get("activityId")).longValue();
+        requireEventManager(ctx, eventUseCase.getActivity(activityId).getEventId());
         String title = (String) body.get("title");
         List<SurveyQuestion> questions = new ArrayList<>();
 
@@ -436,15 +501,17 @@ public class RestApiController {
     private void canEvaluate(Context ctx) {
         Long activityId = Long.parseLong(ctx.pathParam("activityId"));
         Long userId = Long.parseLong(ctx.pathParam("userId"));
+        authorization.requireSelfOrStaff(ctx, userId);
         boolean can = surveyUseCase.canUserEvaluate(userId, activityId);
         ctx.json(Map.of("activityId", activityId, "userId", userId, "canEvaluate", can));
     }
 
     private void submitSurvey(Context ctx) {
+        AuthenticatedSession session = authorization.requireAuthenticated(ctx);
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         Long surveyId = ((Number) body.get("surveyId")).longValue();
         Long activityId = ((Number) body.get("activityId")).longValue();
-        Long userId = ((Number) body.get("userId")).longValue();
+        Long userId = session.userId();
         boolean anonymous = body.containsKey("anonymous") && (Boolean) body.get("anonymous");
 
         Map<Long, String> answers = new HashMap<>();
@@ -461,6 +528,7 @@ public class RestApiController {
 
     private void getSurveyResults(Context ctx) {
         Long activityId = Long.parseLong(ctx.pathParam("activityId"));
+        requireEventManager(ctx, eventUseCase.getActivity(activityId).getEventId());
         SurveyResultsDto results = surveyUseCase.getConsolidatedResults(activityId);
         ctx.json(results);
     }
@@ -468,12 +536,14 @@ public class RestApiController {
     // --- 6. Report & Certificate Handlers ---
     private void getEnrolledReport(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
+        requireEventManager(ctx, eventId);
         EnrolledReportDto report = reportUseCase.getEnrolledReport(eventId);
         ctx.json(report);
     }
 
     private void getEnrolledReportCsv(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
+        requireEventManager(ctx, eventId);
         byte[] csv = reportUseCase.exportEnrolledCsv(eventId);
         ctx.contentType("text/csv; charset=UTF-8");
         ctx.header("Content-Disposition", "attachment; filename=relatorio_inscritos_" + eventId + ".csv");
@@ -482,6 +552,7 @@ public class RestApiController {
 
     private void getEnrolledReportPdf(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
+        requireEventManager(ctx, eventId);
         byte[] pdf = reportUseCase.exportEnrolledPdf(eventId);
         ctx.contentType("application/pdf");
         ctx.header("Content-Disposition", "inline; filename=relatorio_inscritos_" + eventId + ".pdf");
@@ -490,12 +561,14 @@ public class RestApiController {
 
     private void getAttendanceReport(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
+        requireEventManager(ctx, eventId);
         AttendanceReportDto report = reportUseCase.getAttendanceReport(eventId);
         ctx.json(report);
     }
 
     private void getAttendanceReportPdf(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
+        requireEventManager(ctx, eventId);
         byte[] pdf = reportUseCase.exportAttendancePdf(eventId);
         ctx.contentType("application/pdf");
         ctx.header("Content-Disposition", "inline; filename=relatorio_frequencia_" + eventId + ".pdf");
@@ -505,12 +578,14 @@ public class RestApiController {
     private void issueCertificate(Context ctx) {
         Long eventId = Long.parseLong(ctx.pathParam("eventId"));
         Long userId = Long.parseLong(ctx.pathParam("userId"));
+        authorization.requireSelfOrStaff(ctx, userId);
         Certificate cert = certificateUseCase.issueCertificateIfEligible(eventId, userId);
         ctx.status(HttpStatus.CREATED).json(cert);
     }
 
     private void getUserCertificates(Context ctx) {
         Long userId = Long.parseLong(ctx.pathParam("userId"));
+        authorization.requireSelfOrStaff(ctx, userId);
         ctx.json(certificateUseCase.getUserCertificates(userId));
     }
 
@@ -522,6 +597,8 @@ public class RestApiController {
 
     private void downloadCertificatePdf(Context ctx) {
         Long id = Long.parseLong(ctx.pathParam("id"));
+        Certificate certificate = certificateUseCase.getCertificateById(id);
+        authorization.requireSelfOrStaff(ctx, certificate.getUserId());
         byte[] pdf = certificateUseCase.exportCertificatePdf(id);
         ctx.contentType("application/pdf");
         ctx.header("Content-Disposition", "inline; filename=certificado_" + id + ".pdf");
@@ -540,8 +617,29 @@ public class RestApiController {
         );
     }
 
+    private Map<String, Object> authResponse(User user, AuthenticatedSession session) {
+        return Map.of(
+                "token", session.token(),
+                "expiresAt", session.expiresAt().toString(),
+                "user", sanitizeUser(user)
+        );
+    }
+
+    private AuthenticatedSession requireEventManager(Context ctx, Long eventId) {
+        AuthenticatedSession session = authorization.requireRole(ctx, UserRole.ADMIN, UserRole.ORGANIZER);
+        if (session.role() == UserRole.ORGANIZER) {
+            Event event = eventUseCase.getEvent(eventId);
+            if (event.getOrganizerId() == null || !event.getOrganizerId().equals(session.userId())) {
+                throw new UnauthorizedException("Somente o organizador responsável ou um administrador pode alterar este evento.");
+            }
+        }
+        return session;
+    }
+
     private LocalDateTime parseDateTime(String text) {
-        if (text == null || text.trim().isEmpty()) return LocalDateTime.now();
+        if (text == null || text.trim().isEmpty()) {
+            throw new com.eventos.domain.exceptions.ValidationException("Data e horário são obrigatórios.");
+        }
         text = text.trim();
         try {
             if (text.contains("T")) {
@@ -552,7 +650,18 @@ public class RestApiController {
             }
             return LocalDateTime.parse(text, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
         } catch (Exception e) {
-            return LocalDateTime.now();
+            throw new com.eventos.domain.exceptions.ValidationException(
+                    "Data/hora inválida. Use ISO-8601, dd/MM/yyyy HH:mm ou yyyy-MM-dd HH:mm.");
         }
+    }
+
+    private boolean booleanValue(Map<String, Object> body, String key, boolean defaultValue) {
+        Object value = body.get(key);
+        return value instanceof Boolean bool ? bool : defaultValue;
+    }
+
+    private String stringValue(Map<String, Object> body, String key, String defaultValue) {
+        Object value = body.get(key);
+        return value instanceof String text && !text.isBlank() ? text : defaultValue;
     }
 }

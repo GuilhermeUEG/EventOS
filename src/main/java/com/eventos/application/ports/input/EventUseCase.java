@@ -11,6 +11,7 @@ public interface EventUseCase {
     Event updateEvent(Event event);
     Event publishEvent(Long eventId);
     Event cancelEvent(Long eventId);
+    Event finishEvent(Long eventId);
     Event getEvent(Long id);
     List<Event> listEvents();
     List<Event> filterEvents(String search, String track, ActivityType type, EventStatus status);
