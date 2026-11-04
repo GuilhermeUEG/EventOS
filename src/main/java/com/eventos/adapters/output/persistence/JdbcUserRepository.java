@@ -11,10 +11,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class JdbcUserRepository implements UserRepository {
+    private static final int BATCH = 500;
 
     @Override
     public User save(User user) {
@@ -30,31 +33,32 @@ public class JdbcUserRepository implements UserRepository {
                 stmt.executeUpdate();
                 try (ResultSet rs = stmt.getGeneratedKeys()) {
                     if (rs.next()) {
-                        return new User(rs.getLong(1), user.getName(), user.getEmail(), user.getPasswordHash(), user.getRole(), user.getCreatedAt());
+                        return new User(rs.getLong(1), user.getName(), user.getEmail(), user.getPasswordHash(),
+                                user.getRole(), user.getCreatedAt());
                     }
                 }
             } catch (SQLException e) {
-                throw new RuntimeException("Erro ao inserir usuário: " + e.getMessage(), e);
+                throw new IllegalStateException("Erro ao inserir usuário: " + e.getMessage(), e);
             }
-        } else {
-            String sql = "UPDATE users SET name = ?, password_hash = ?, role = ? WHERE id = ?";
-            try (Connection conn = DatabaseManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, user.getName());
-                stmt.setString(2, user.getPasswordHash());
-                stmt.setString(3, user.getRole().name());
-                stmt.setLong(4, user.getId());
-                stmt.executeUpdate();
-                return user;
-            } catch (SQLException e) {
-                throw new RuntimeException("Erro ao atualizar usuário: " + e.getMessage(), e);
-            }
+            return user;
         }
-        return user;
+        String sql = "UPDATE users SET name = ?, password_hash = ?, role = ? WHERE id = ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, user.getName());
+            stmt.setString(2, user.getPasswordHash());
+            stmt.setString(3, user.getRole().name());
+            stmt.setLong(4, user.getId());
+            stmt.executeUpdate();
+            return user;
+        } catch (SQLException e) {
+            throw new IllegalStateException("Erro ao atualizar usuário: " + e.getMessage(), e);
+        }
     }
 
     @Override
     public Optional<User> findById(Long id) {
+        if (id == null) return Optional.empty();
         String sql = "SELECT * FROM users WHERE id = ?";
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -63,7 +67,7 @@ public class JdbcUserRepository implements UserRepository {
                 if (rs.next()) return Optional.of(mapRow(rs));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao buscar usuário por ID: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao buscar usuário por ID: " + e.getMessage(), e);
         }
         return Optional.empty();
     }
@@ -78,7 +82,7 @@ public class JdbcUserRepository implements UserRepository {
                 if (rs.next()) return Optional.of(mapRow(rs));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao buscar usuário por e-mail: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao buscar usuário por e-mail: " + e.getMessage(), e);
         }
         return Optional.empty();
     }
@@ -92,9 +96,30 @@ public class JdbcUserRepository implements UserRepository {
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) list.add(mapRow(rs));
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao listar usuários: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao listar usuários: " + e.getMessage(), e);
         }
         return list;
+    }
+
+    @Override
+    public List<User> findByIds(Collection<Long> ids) {
+        List<Long> all = ids == null ? List.of() : new ArrayList<>(ids);
+        List<User> result = new ArrayList<>();
+        try (Connection conn = DatabaseManager.getConnection()) {
+            for (int from = 0; from < all.size(); from += BATCH) {
+                List<Long> chunk = all.subList(from, Math.min(all.size(), from + BATCH));
+                String placeholders = chunk.stream().map(i -> "?").collect(Collectors.joining(","));
+                try (PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE id IN (" + placeholders + ")")) {
+                    for (int i = 0; i < chunk.size(); i++) stmt.setLong(i + 1, chunk.get(i));
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        while (rs.next()) result.add(mapRow(rs));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Erro ao buscar usuários: " + e.getMessage(), e);
+        }
+        return result;
     }
 
     @Override

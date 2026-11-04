@@ -8,15 +8,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Resposta submetida a um questionário de avaliação (RF-26, RF-27, RN-14, RN-15).
+ * Resposta submetida a um questionário de avaliação (RF-26, RF-27, RN-13, RN-14).
  */
 public class SurveyResponse implements Serializable {
     private final Long id;
     private final Long surveyId;
     private final Long activityId;
     private final Long userId;
-    private final boolean anonymous; // RN-15
-    private final Map<Long, String> answersByQuestionId; // questionId -> answer text
+    private final boolean anonymous; // herdado da política do questionário
+    private final Map<Long, String> answersByQuestionId; // questionId -> texto da resposta
     private final LocalDateTime submittedAt;
 
     public SurveyResponse(Long id, Long surveyId, Long activityId, Long userId,
@@ -57,7 +57,16 @@ public class SurveyResponse implements Serializable {
         return Collections.unmodifiableMap(answersByQuestionId);
     }
 
+    public String answerFor(Long questionId) {
+        return answersByQuestionId.get(questionId);
+    }
+
     public LocalDateTime getSubmittedAt() {
         return submittedAt;
+    }
+
+    /** Como o respondente aparece para o organizador, respeitando a política de anonimato. */
+    public String respondentLabel() {
+        return anonymous ? "Anônimo" : "Participante #" + userId;
     }
 }

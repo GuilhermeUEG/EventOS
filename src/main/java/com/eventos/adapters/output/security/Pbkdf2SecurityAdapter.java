@@ -10,17 +10,49 @@ import javax.crypto.Mac;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * PBKDF2 para senhas e HMAC para tokens QR temporários.
+ * PBKDF2 para senhas e HMAC-SHA256 para o conteúdo dos QR Codes de frequência (RNF-05, RN-10, D-05).
+ *
+ * <p>O segredo do HMAC vem da variável de ambiente {@value #SECRET_ENV}. Sem ela, um segredo
+ * aleatório é gerado a cada inicialização: os QR Codes antigos deixam de valer ao reiniciar,
+ * o que é aceitável porque eles já expiram em poucos minutos.</p>
  */
 public class Pbkdf2SecurityAdapter implements SecurityPort {
+    public static final String SECRET_ENV = "EVENTOS_QR_SECRET";
+
+    private static final Logger log = LoggerFactory.getLogger(Pbkdf2SecurityAdapter.class);
     private static final int ITERATIONS = 120_000;
     private static final int KEY_LENGTH = 256;
     private static final Duration QR_VALIDITY = Duration.ofMinutes(15);
-    private static final byte[] QR_SECRET =
-            "EventOS_QR_HMAC_2026_change_in_production".getBytes(StandardCharsets.UTF_8);
+    private static final String LEGACY_SHA256_SALT = "EventOS_POO2_Secure_Salt_2026!";
+
     private final SecureRandom secureRandom = new SecureRandom();
+    private final byte[] qrSecret;
+
+    public Pbkdf2SecurityAdapter() {
+        this(resolveSecret());
+    }
+
+    public Pbkdf2SecurityAdapter(byte[] qrSecret) {
+        if (qrSecret == null || qrSecret.length < 16) {
+            throw new IllegalArgumentException("O segredo do QR Code deve ter ao menos 16 bytes.");
+        }
+        this.qrSecret = qrSecret.clone();
+    }
+
+    private static byte[] resolveSecret() {
+        String configured = System.getenv(SECRET_ENV);
+        if (configured != null && configured.length() >= 16) {
+            return configured.getBytes(StandardCharsets.UTF_8);
+        }
+        log.warn("Variável {} ausente ou curta: usando segredo aleatório desta execução para os QR Codes.", SECRET_ENV);
+        byte[] random = new byte[32];
+        new SecureRandom().nextBytes(random);
+        return random;
+    }
 
     @Override
     public String hashPassword(String plainPassword) {
@@ -62,13 +94,6 @@ public class Pbkdf2SecurityAdapter implements SecurityPort {
     }
 
     @Override
-    public String generateToken(String subject) {
-        byte[] bytes = new byte[32];
-        secureRandom.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    @Override
     public String generateQrToken(Long activityId) {
         long timestamp = System.currentTimeMillis();
         String payload = "ACT_" + activityId + "_" + timestamp;
@@ -79,8 +104,9 @@ public class Pbkdf2SecurityAdapter implements SecurityPort {
 
     @Override
     public Long validateQrToken(String token) {
+        if (token == null || token.isBlank()) return null;
         try {
-            String decoded = new String(Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8);
+            String decoded = new String(Base64.getUrlDecoder().decode(token.trim()), StandardCharsets.UTF_8);
             String[] parts = decoded.split("_", 4);
             if (parts.length != 4 || !"ACT".equals(parts[0])) return null;
             Long activityId = Long.parseLong(parts[1]);
@@ -94,9 +120,14 @@ public class Pbkdf2SecurityAdapter implements SecurityPort {
                 return null;
             }
             return activityId;
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    @Override
+    public Duration qrValidity() {
+        return QR_VALIDITY;
     }
 
     private byte[] derive(char[] password, byte[] salt, int iterations) {
@@ -113,7 +144,7 @@ public class Pbkdf2SecurityAdapter implements SecurityPort {
     private String sign(String payload) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(QR_SECRET, "HmacSHA256"));
+            mac.init(new SecretKeySpec(qrSecret, "HmacSHA256"));
             return Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
@@ -121,11 +152,11 @@ public class Pbkdf2SecurityAdapter implements SecurityPort {
         }
     }
 
+    /** Hash de versões antigas do sistema; aceito apenas para migrar a senha no próximo login. */
     private String legacySha256(String plainPassword) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(("EventOS_POO2_Secure_Salt_2026!" + plainPassword)
-                    .getBytes(StandardCharsets.UTF_8));
+            byte[] hash = digest.digest((LEGACY_SHA256_SALT + plainPassword).getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(hash);
         } catch (Exception e) {
             throw new IllegalStateException("Não foi possível validar o hash legado.", e);

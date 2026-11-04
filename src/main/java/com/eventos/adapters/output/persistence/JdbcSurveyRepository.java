@@ -21,30 +21,37 @@ import java.util.Map;
 import java.util.Optional;
 
 public class JdbcSurveyRepository implements SurveyRepository {
+    private static final String OPTION_SEPARATOR = ";;";
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Override
     public FeedbackSurvey saveSurvey(FeedbackSurvey survey) {
-        if (survey.getId() == null) {
-            String sql = "INSERT INTO feedback_surveys (activity_id, title, active) VALUES (?, ?, ?)";
-            try (Connection conn = DatabaseManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        if (survey.getId() != null) {
+            return survey;
+        }
+        String sql = "INSERT INTO feedback_surveys (activity_id, title, active, anonymous_responses) VALUES (?, ?, ?, ?)";
+        try (Connection conn = DatabaseManager.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 stmt.setLong(1, survey.getActivityId());
                 stmt.setString(2, survey.getTitle());
                 stmt.setBoolean(3, survey.isActive());
+                stmt.setBoolean(4, survey.isAnonymousResponses());
                 stmt.executeUpdate();
                 try (ResultSet rs = stmt.getGeneratedKeys()) {
                     if (rs.next()) {
-                        long surveyId = rs.getLong(1);
-                        saveQuestions(conn, surveyId, survey.getQuestions());
-                        return findSurveyByActivityId(survey.getActivityId()).orElse(survey);
+                        saveQuestions(conn, rs.getLong(1), survey.getQuestions());
                     }
                 }
-            } catch (SQLException e) {
-                throw new RuntimeException("Erro ao criar questionário: " + e.getMessage(), e);
+                conn.commit();
+            } catch (SQLException | RuntimeException e) {
+                conn.rollback();
+                throw e;
             }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Erro ao criar questionário: " + e.getMessage(), e);
         }
-        return survey;
+        return findSurveyByActivityId(survey.getActivityId()).orElse(survey);
     }
 
     @Override
@@ -57,11 +64,12 @@ public class JdbcSurveyRepository implements SurveyRepository {
                 if (rs.next()) {
                     long id = rs.getLong("id");
                     List<SurveyQuestion> questions = findQuestions(conn, id);
-                    return Optional.of(new FeedbackSurvey(id, activityId, rs.getString("title"), questions, rs.getBoolean("active")));
+                    return Optional.of(new FeedbackSurvey(id, activityId, rs.getString("title"), questions,
+                            rs.getBoolean("active"), rs.getBoolean("anonymous_responses")));
                 }
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao buscar questionário: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao buscar questionário: " + e.getMessage(), e);
         }
         return Optional.empty();
     }
@@ -81,11 +89,12 @@ public class JdbcSurveyRepository implements SurveyRepository {
             try (ResultSet rs = stmt.getGeneratedKeys()) {
                 if (rs.next()) {
                     return new SurveyResponse(rs.getLong(1), response.getSurveyId(), response.getActivityId(),
-                            response.getUserId(), response.isAnonymous(), response.getAnswersByQuestionId(), response.getSubmittedAt());
+                            response.getUserId(), response.isAnonymous(), response.getAnswersByQuestionId(),
+                            response.getSubmittedAt());
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException("Erro ao salvar resposta da avaliação: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao salvar resposta da avaliação: " + e.getMessage(), e);
         }
         return response;
     }
@@ -101,7 +110,7 @@ public class JdbcSurveyRepository implements SurveyRepository {
                 if (rs.next()) return Optional.of(mapResponseRow(rs));
             }
         } catch (Exception e) {
-            throw new RuntimeException("Erro ao verificar resposta de avaliação: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao verificar resposta de avaliação: " + e.getMessage(), e);
         }
         return Optional.empty();
     }
@@ -109,7 +118,7 @@ public class JdbcSurveyRepository implements SurveyRepository {
     @Override
     public List<SurveyResponse> findResponsesByActivityId(Long activityId) {
         List<SurveyResponse> list = new ArrayList<>();
-        String sql = "SELECT * FROM survey_responses WHERE activity_id = ? ORDER BY submitted_at ASC";
+        String sql = "SELECT * FROM survey_responses WHERE activity_id = ? ORDER BY submitted_at ASC, id ASC";
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setLong(1, activityId);
@@ -117,20 +126,19 @@ public class JdbcSurveyRepository implements SurveyRepository {
                 while (rs.next()) list.add(mapResponseRow(rs));
             }
         } catch (Exception e) {
-            throw new RuntimeException("Erro ao listar respostas da atividade: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao listar respostas da atividade: " + e.getMessage(), e);
         }
         return list;
     }
 
     private void saveQuestions(Connection conn, Long surveyId, List<SurveyQuestion> questions) throws SQLException {
-        if (questions == null || questions.isEmpty()) return;
         String sql = "INSERT INTO survey_questions (survey_id, question_text, question_type, options_csv, required) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             for (SurveyQuestion q : questions) {
                 stmt.setLong(1, surveyId);
                 stmt.setString(2, q.getQuestionText());
                 stmt.setString(3, q.getType().name());
-                stmt.setString(4, String.join(";;", q.getOptions()));
+                stmt.setString(4, String.join(OPTION_SEPARATOR, q.getOptions()));
                 stmt.setBoolean(5, q.isRequired());
                 stmt.addBatch();
             }
@@ -147,7 +155,7 @@ public class JdbcSurveyRepository implements SurveyRepository {
                 while (rs.next()) {
                     String opts = rs.getString("options_csv");
                     List<String> optList = (opts != null && !opts.trim().isEmpty())
-                            ? Arrays.asList(opts.split(";;"))
+                            ? Arrays.asList(opts.split(OPTION_SEPARATOR))
                             : new ArrayList<>();
                     list.add(new SurveyQuestion(
                             rs.getLong("id"),
@@ -163,8 +171,7 @@ public class JdbcSurveyRepository implements SurveyRepository {
     }
 
     private SurveyResponse mapResponseRow(ResultSet rs) throws Exception {
-        String json = rs.getString("answers_json");
-        Map<Long, String> answers = mapper.readValue(json, new TypeReference<HashMap<Long, String>>() {});
+        Map<Long, String> answers = mapper.readValue(rs.getString("answers_json"), new TypeReference<HashMap<Long, String>>() {});
         return new SurveyResponse(
                 rs.getLong("id"),
                 rs.getLong("survey_id"),

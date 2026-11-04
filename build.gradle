@@ -10,9 +10,6 @@ description = 'EventOS Platform'
 java {
 	sourceCompatibility = JavaVersion.VERSION_21
 	targetCompatibility = JavaVersion.VERSION_21
-	toolchain {
-		// languageVersion = JavaLanguageVersion.of(21)
-	}
 }
 
 application {
@@ -24,20 +21,28 @@ repositories {
 }
 
 dependencies {
-	// Javalin REST API Framework & Web Server
+	// Javalin REST API Framework & Web Server (sem Spring)
 	implementation 'io.javalin:javalin:6.1.3'
+	implementation 'org.slf4j:slf4j-api:2.0.12'
 	implementation 'org.slf4j:slf4j-simple:2.0.12'
-	
+
 	// Jackson for JSON conversion in Javalin
 	implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'
 	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.0'
-	
+
 	// H2 Database Driver
 	implementation 'com.h2database:h2:2.2.224'
-	
+
 	// PDF Generation
 	implementation 'com.github.librepdf:openpdf:2.0.3'
-	
+
+	// QR Code (geração local da imagem)
+	implementation 'com.google.zxing:core:3.5.3'
+	implementation 'com.google.zxing:javase:3.5.3'
+
+	// Envio de e-mail (SMTP) com anexo
+	implementation 'org.eclipse.angus:angus-mail:2.0.3'
+
 	// JUnit 5 for testing
 	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -45,4 +50,10 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// Os testes usam um banco H2 em memória: nunca tocam o banco de arquivo da aplicação.
+	systemProperty 'eventos.db.url', 'jdbc:h2:mem:eventos_test;DB_CLOSE_DELAY=-1'
+	testLogging {
+		events 'passed', 'skipped', 'failed'
+		exceptionFormat 'full'
+	}
 }

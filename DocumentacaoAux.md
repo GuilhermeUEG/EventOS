@@ -1,68 +1,49 @@
-# Documentação Auxiliar - EventOS
+# Documentação auxiliar — EventOS
 
-Este documento registra as decisões tecnológicas, escolhas de design e explicações de arquitetura do projeto **EventOS** para a disciplina de Programação Orientada a Objetos II (POO II).
+Escolhas de ferramentas e de execução do projeto de POO II. As decisões arquiteturais D-01 a D-08, as refatorações e a
+rastreabilidade ROO estão em [docs/DECISOES.md](docs/DECISOES.md); a arquitetura em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 
----
+## 1. Ferramenta de build: Gradle (com *wrapper*)
 
-## 1. Escolha da Ferramenta de Build: Gradle vs. Maven
+O núcleo é Java 21 (RNF-03). Para bibliotecas (Javalin, Jackson, H2, OpenPDF, ZXing) e ciclo de vida usamos **Gradle** em vez de Maven.
 
-### Motivação
-O núcleo do software EventOS é desenvolvido em Java 21, conforme exigência do regulamento (RNF-03). Para gerenciar bibliotecas externas (Javalin, Jackson, H2 Database e OpenPDF) e o ciclo de vida do software, adotamos o **Gradle** em vez do **Maven** ou do gerenciamento manual de dependências.
+- **Wrapper (`gradlew`/`gradlew.bat`):** compila e executa em qualquer computador sem instalar Gradle nem configurar `PATH`; o próprio script baixa a versão certa na primeira execução. Só é preciso ter um **JDK 21+** e o `JAVA_HOME` apontando para ele.
+- **Arquivo declarativo curto:** [build.gradle](build.gradle) lê-se melhor que um `pom.xml` e facilita adicionar dependências e configurar a tarefa de teste.
+- **Compilação incremental** e *daemon*, que deixam os ciclos de teste mais rápidos.
 
-### Justificativas Técnicas (Decisão D-01/D-08)
-1.  **Gradle Wrapper (`gradlew.bat`)**:
-    *   Permite a compilação e execução imediata do projeto em qualquer máquina sem a necessidade de pré-instalar o Gradle ou configurar variáveis de ambiente do sistema (`PATH`). O próprio script do wrapper baixa a versão correta do Gradle de forma automatizada na primeira execução.
-2.  **Sintaxe Concisa (Groovy/Kotlin DSL)**:
-    *   Diferente do Maven que usa arquivos XML (`pom.xml`) extremamente verbosos e difíceis de ler, o arquivo [build.gradle](file:///C:/Users/Guilherme/Documents/EventOS/build.gradle) utiliza uma linguagem declarativa limpa que facilita adições de novas dependências e a customização de tarefas.
-3.  **Compilação Incremental e Desempenho**:
-    *   O Gradle rastreia as entradas e saídas de cada tarefa de build e reconstrói apenas o que foi alterado. Aliado ao processo em segundo plano (*Daemon*), torna o tempo de compilação significativamente menor que o do Maven.
+Problema comum em outro computador: o `gradlew` usa o `JAVA_HOME`. Se ele apontar para um JDK antigo (por exemplo, 8), o build falha com
+*"invalid source release: 21"* ou *"requires JVM 17+"*. A correção é apontar `JAVA_HOME` para um JDK 21 ou superior.
 
----
+## 2. Sem Spring Boot
 
-## 2. Escolha da Arquitetura: Hexagonal (Ports & Adapters)
+Por orientação do professor, **não usamos Spring Boot** (nem Spring em qualquer parte; um teste automático garante que nenhum arquivo importa `org.springframework`).
+Em troca:
 
-### Motivação
-A exigência principal do projeto (RNF-01 e ROO-09) é manter as regras de negócio centrais blindadas e independentes do banco de dados e das interfaces visuais.
+1. **Injeção de dependências manual** em [EventosApplication](src/main/java/com/eventos/EventosApplication.java): o *composition root* cria os adaptadores, os casos de uso e a API e os liga pelas portas. As dependências ficam à vista, o que ajuda a explicar a arquitetura.
+2. **API REST com Javalin 6** (Jetty embarcado): roteamento explícito, sem anotações de controller. Os controllers são pequenos e por área.
+3. **Persistência com JDBC puro** e SQL explícito. O esquema vem de scripts versionados em [db/migration](src/main/resources/db/migration), aplicados por um migrador próprio ([SchemaMigrator](src/main/java/com/eventos/adapters/output/persistence/SchemaMigrator.java)).
 
-### Estrutura do EventOS (Decisão D-06/D-07)
-O projeto está dividido em pacotes que isolam a aplicação:
-*   **Domínio (`com.eventos.domain`)**:
-    *   Contém as entidades puras do Java (`Event`, `Activity`, `Participant`). Não há frameworks aqui. Toda lógica de validação de regras de negócio (ex: detecção de conflitos de horários em salas) é mantida diretamente nas classes de domínio.
-*   **Aplicação (`com.eventos.application`)**:
-    *   Define os casos de uso do sistema (`EventUseCase`) e as portas de entrada e saída (*Ports*). As portas de saída são interfaces que descrevem a comunicação externa (ex: `EventRepository` para salvar dados).
-*   **Adaptadores (`com.eventos.adapters`)**:
-    *   Implementações tecnológicas concretas (*Adapters*).
-    *   *Entrada (REST API - Javalin)*: Micro-serviço web Javalin que expõe endpoints HTTP para o site público.
-    *   *Entrada (Desktop - Swing)*: Interface desktop administrativa nativa escrita em Java Swing.
-    *   *Saída (Persistência - JDBC)*: Implementação do repositório utilizando conexões JDBC puras e banco de dados relacional H2, realizando queries SQL brutas transacionadas.
+## 3. Execução sem interface gráfica (modo *headless*)
 
----
+O painel desktop só abre quando existe ambiente gráfico (`GraphicsEnvironment.isHeadless()`); caso contrário a aplicação sobe apenas a API e o
+site, sem erro. Também é possível pedir isso explicitamente com `--no-desktop`. É o que permite executar o projeto em servidores e em
+máquinas de avaliação sem monitor.
 
-## 3. Decisão de Design: Remoção do Spring Boot (Transição para Stack Leve)
+## 4. Testes isolados do banco da aplicação
 
-### Por que removemos o Spring Boot?
-Atendendo à diretriz de avaliação, removemos o ecossistema Spring Boot. A fiação manual de componentes e o acesso direto ao banco foram implementados para tornar o design orientado a objetos explícito e didático.
+Os testes usam H2 **em memória**: o Gradle define a propriedade `eventos.db.url` para a tarefa `test`
+([build.gradle](build.gradle)). Assim, rodar a suíte nunca altera o arquivo `eventosdb` usado pela aplicação, e a ordem dos testes não importa
+(cada teste cria usuários com e-mails únicos). A mesma propriedade (ou a variável `EVENTOS_DB_URL`) permite apontar a aplicação para outro banco.
 
-### Como funciona sem o Spring Boot?
-1.  **Injeção de Dependências Manual**:
-    *   Ao invés de deixar o Spring gerenciar os beans em segundo plano (`@Autowired`, `@Component`), as dependências são instanciadas e conectadas explicitamente no método `main` da classe [EventosApplication.java](file:///C:/Users/Guilherme/Documents/EventOS/src/main/java/com/eventos/EventosApplication.java). Isso melhora o entendimento do fluxo de controle.
-2.  **API REST com Javalin**:
-    *   Adotamos o **Javalin 6.x**, um framework extremamente leve rodando sob o Jetty embarcado. Ele oferece roteamento rápido e limpo sem a sobrecarga ou anotações complexas de controllers do Spring Boot.
-3.  **Persistência com JDBC Puro (Java Database Connectivity)**:
-    *   Substituímos o Spring Data JPA (Hibernate) por prepared statements SQL nativos. `DatabaseManager` cria e migra as tabelas na inicialização; os adaptadores `Jdbc*Repository` implementam as portas de persistência do núcleo atual.
+## 5. Mudanças de rumo registradas
 
-## 4. Refatorações relevantes
+| Mudança | Motivo |
+|---|---|
+| Unificação do modelo de domínio (`com.eventos.domain.model`) | Existiam duas representações concorrentes e o projeto não compilava |
+| Autorização no servidor | A interface simulava perfis no navegador; agora há sessão opaca e verificação de perfil e de posse do evento na API |
+| PBKDF2 com sal aleatório | Substituiu SHA-256 com sal fixo |
+| Desktop como cliente HTTP puro, sem importar o domínio | Garante que site e desktop usam a mesma API (RNF-02) |
+| QR Code gerado localmente (ZXing) | A versão anterior enviava o conteúdo do QR a um serviço externo |
+| Migrações de esquema versionadas | A criação do banco ficava embutida no código |
 
-1. **Unificação do domínio:** removemos o modelo legado `com.eventos.domain.Event/Activity/Participant` e seus adaptadores incompatíveis. Antes havia duas representações concorrentes e o projeto não compilava; agora todas as portas utilizam `com.eventos.domain.model`.
-2. **Autorização no servidor:** a interface simulava perfis no navegador. A autenticação agora cria sessão opaca no servidor, o cadastro público sempre gera participante e os handlers validam perfil, identidade e responsabilidade pelo evento.
-3. **Segurança e frequência:** SHA-256 com salt fixo foi substituído por PBKDF2 com salt aleatório. Tokens QR agora usam HMAC, expiram em 15 minutos e registros repetidos são tratados de modo idempotente.
-
----
-
-## 5. Compatibilidade Headless (Swing em Ambientes de Servidor/Teste)
-
-### O Problema
-A classe `SwingDesktopApp` estende `JFrame` do Java Swing. Ao rodar testes automatizados ou iniciar a aplicação em servidores em nuvem (onde não há ambiente gráfico/monitor disponível), a JVM tenta inicializar componentes gráficos e lança o erro `java.awt.HeadlessException`.
-
-### A Solução Implementada
-No método `main` de [EventosApplication.java](file:///C:/Users/Guilherme/Documents/EventOS/src/main/java/com/eventos/EventosApplication.java), verificamos se o ambiente é headless chamando `!GraphicsEnvironment.isHeadless()` antes de inicializar o Swing na Thread de Despacho de Eventos (EDT). Desta forma, o servidor Javalin pode rodar perfeitamente em modo somente-API no servidor de testes do professor, enquanto a interface Swing abre normalmente em ambientes locais interativos.
+O detalhamento (problema, alternativa, efeito) está em [docs/DECISOES.md](docs/DECISOES.md).

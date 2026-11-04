@@ -1,11 +1,17 @@
 package com.eventos.domain.policies;
 
+import com.eventos.domain.exceptions.ValidationException;
+
 public class MinimumAttendancePercentagePolicy implements CertificateEligibilityPolicy {
     public static final String KEY = "MIN_PERCENTAGE";
-    private final double minPercentage; // e.g. 75.0
+
+    private final double minPercentage;
 
     public MinimumAttendancePercentagePolicy(double minPercentage) {
-        this.minPercentage = minPercentage > 0 ? minPercentage : 75.0;
+        if (minPercentage <= 0 || minPercentage > 100) {
+            throw new ValidationException("O percentual mínimo de presença deve estar entre 0 (exclusivo) e 100.");
+        }
+        this.minPercentage = minPercentage;
     }
 
     public double getMinPercentage() {
@@ -19,15 +25,23 @@ public class MinimumAttendancePercentagePolicy implements CertificateEligibility
 
     @Override
     public String getPolicyDescription() {
-        return "Exige no mínimo " + minPercentage + "% de presença na carga horária total do evento.";
+        return "Exige no mínimo " + format(minPercentage) + "% de presença na carga horária total do evento.";
     }
 
     @Override
-    public boolean isEligible(int totalActivitiesAttended, int totalRequiredActivities, double totalHoursAttended, double totalEventHours) {
-        if (totalEventHours <= 0) {
-            return totalActivitiesAttended > 0;
+    public boolean isEligible(ParticipationSummary summary) {
+        if (summary.getTotalHours() <= 0) {
+            return summary.getAttendedCount() > 0;
         }
-        double percentage = (totalHoursAttended / totalEventHours) * 100.0;
-        return percentage >= minPercentage;
+        return summary.getAttendedPercentage() >= minPercentage;
+    }
+
+    @Override
+    public CertificatePolicySpec spec() {
+        return new CertificatePolicySpec(KEY, minPercentage, null, null);
+    }
+
+    private static String format(double value) {
+        return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
     }
 }

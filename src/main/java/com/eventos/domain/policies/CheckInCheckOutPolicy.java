@@ -3,10 +3,14 @@ package com.eventos.domain.policies;
 import com.eventos.domain.model.AttendanceRecord;
 import com.eventos.domain.model.AttendanceStatus;
 import com.eventos.domain.model.AttendanceType;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class CheckInCheckOutPolicy implements AttendancePolicy {
     public static final String KEY = "CHECKIN_CHECKOUT";
+    /** Leituras repetidas dentro deste intervalo são tratadas como repetição acidental da entrada. */
+    public static final Duration ACCIDENTAL_REPEAT_WINDOW = Duration.ofSeconds(30);
 
     @Override
     public String getPolicyKey() {
@@ -25,22 +29,47 @@ public class CheckInCheckOutPolicy implements AttendancePolicy {
 
     @Override
     public AttendanceStatus evaluate(List<AttendanceRecord> records) {
-        if (records == null || records.isEmpty()) {
+        List<AttendanceRecord> effective = AttendanceRecord.effective(records);
+        if (effective.isEmpty()) {
             return AttendanceStatus.ABSENT;
         }
-        boolean hasManual = records.stream().anyMatch(r -> r.getType() == AttendanceType.MANUAL_ENTRY);
-        if (hasManual) {
+        if (last(effective, AttendanceType.MANUAL_ENTRY) != null) {
             return AttendanceStatus.PRESENT;
         }
-
-        boolean hasIn = records.stream().anyMatch(r -> r.getType() == AttendanceType.CHECK_IN);
-        boolean hasOut = records.stream().anyMatch(r -> r.getType() == AttendanceType.CHECK_OUT);
-
+        boolean hasIn = last(effective, AttendanceType.CHECK_IN) != null;
+        boolean hasOut = last(effective, AttendanceType.CHECK_OUT) != null;
         if (hasIn && hasOut) {
             return AttendanceStatus.PRESENT;
-        } else if (hasIn || hasOut) {
-            return AttendanceStatus.PARTIAL;
         }
-        return AttendanceStatus.ABSENT;
+        return (hasIn || hasOut) ? AttendanceStatus.PARTIAL : AttendanceStatus.ABSENT;
+    }
+
+    @Override
+    public AttendanceDecision decideQrMark(List<AttendanceRecord> records, LocalDateTime now) {
+        List<AttendanceRecord> effective = AttendanceRecord.effective(records);
+        AttendanceRecord manual = last(effective, AttendanceType.MANUAL_ENTRY);
+        if (manual != null) {
+            return AttendanceDecision.alreadyRecorded(manual);
+        }
+        AttendanceRecord in = last(effective, AttendanceType.CHECK_IN);
+        AttendanceRecord out = last(effective, AttendanceType.CHECK_OUT);
+        if (in == null) {
+            return AttendanceDecision.record(AttendanceType.CHECK_IN);
+        }
+        if (out != null) {
+            return AttendanceDecision.rejected("A entrada e a saída já foram registradas para esta atividade.");
+        }
+        if (Duration.between(in.getTimestamp(), now).compareTo(ACCIDENTAL_REPEAT_WINDOW) < 0) {
+            return AttendanceDecision.alreadyRecorded(in);
+        }
+        return AttendanceDecision.record(AttendanceType.CHECK_OUT);
+    }
+
+    private AttendanceRecord last(List<AttendanceRecord> records, AttendanceType type) {
+        AttendanceRecord found = null;
+        for (AttendanceRecord r : records) {
+            if (r.getType() == type) found = r;
+        }
+        return found;
     }
 }

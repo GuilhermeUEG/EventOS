@@ -33,57 +33,47 @@ public class JdbcAttendanceRepository implements AttendanceRepository {
                 }
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao salvar registro de frequência: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao salvar registro de frequência: " + e.getMessage(), e);
         }
         return record;
     }
 
     @Override
     public List<AttendanceRecord> findByActivityId(Long activityId) {
-        List<AttendanceRecord> list = new ArrayList<>();
-        String sql = "SELECT * FROM attendance_records WHERE activity_id = ? ORDER BY timestamp ASC";
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setLong(1, activityId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Erro ao buscar frequências: " + e.getMessage(), e);
-        }
-        return list;
+        return query("SELECT * FROM attendance_records WHERE activity_id = ? ORDER BY timestamp ASC, id ASC",
+                "Erro ao buscar frequências", activityId);
     }
 
     @Override
     public List<AttendanceRecord> findByActivityAndUser(Long activityId, Long userId) {
-        List<AttendanceRecord> list = new ArrayList<>();
-        String sql = "SELECT * FROM attendance_records WHERE activity_id = ? AND user_id = ? ORDER BY timestamp ASC";
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setLong(1, activityId);
-            stmt.setLong(2, userId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) list.add(mapRow(rs));
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Erro ao buscar frequências de participante: " + e.getMessage(), e);
-        }
-        return list;
+        return query("SELECT * FROM attendance_records WHERE activity_id = ? AND user_id = ? ORDER BY timestamp ASC, id ASC",
+                "Erro ao buscar frequências de participante", activityId, userId);
     }
 
     @Override
     public List<AttendanceRecord> findByUserAndEvent(Long userId, Long eventId) {
+        return query("SELECT ar.* FROM attendance_records ar JOIN activities a ON a.id = ar.activity_id "
+                        + "WHERE ar.user_id = ? AND a.event_id = ? ORDER BY ar.timestamp ASC, ar.id ASC",
+                "Erro ao buscar frequências do evento", userId, eventId);
+    }
+
+    @Override
+    public List<AttendanceRecord> findByEventId(Long eventId) {
+        return query("SELECT ar.* FROM attendance_records ar JOIN activities a ON a.id = ar.activity_id "
+                        + "WHERE a.event_id = ? ORDER BY ar.timestamp ASC, ar.id ASC",
+                "Erro ao buscar frequências do evento", eventId);
+    }
+
+    private List<AttendanceRecord> query(String sql, String errorMessage, Long... params) {
         List<AttendanceRecord> list = new ArrayList<>();
-        String sql = "SELECT ar.* FROM attendance_records ar JOIN activities a ON a.id = ar.activity_id WHERE ar.user_id = ? AND a.event_id = ? ORDER BY ar.timestamp ASC";
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setLong(1, userId);
-            stmt.setLong(2, eventId);
+            for (int i = 0; i < params.length; i++) stmt.setLong(i + 1, params[i]);
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) list.add(mapRow(rs));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao buscar frequências do evento: " + e.getMessage(), e);
+            throw new IllegalStateException(errorMessage + ": " + e.getMessage(), e);
         }
         return list;
     }

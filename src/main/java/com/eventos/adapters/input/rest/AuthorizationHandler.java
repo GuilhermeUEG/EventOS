@@ -2,13 +2,15 @@ package com.eventos.adapters.input.rest;
 
 import com.eventos.application.auth.AuthenticatedSession;
 import com.eventos.application.ports.output.SessionStore;
+import com.eventos.domain.exceptions.ForbiddenException;
 import com.eventos.domain.exceptions.UnauthorizedException;
 import com.eventos.domain.model.UserRole;
 import io.javalin.http.Context;
 import java.util.Optional;
 
 /**
- * Autoriza operações no servidor; ocultar botões no cliente nunca é considerado autorização.
+ * Autoriza operações no servidor (RNF-06): ocultar botões no cliente nunca é considerado autorização.
+ * Sem sessão válida responde 401; com sessão mas sem permissão responde 403.
  */
 public class AuthorizationHandler {
     private final SessionStore sessionStore;
@@ -29,7 +31,7 @@ public class AuthorizationHandler {
     public AuthenticatedSession requireRole(Context ctx, UserRole... roles) {
         AuthenticatedSession session = requireAuthenticated(ctx);
         if (!session.hasAnyRole(roles)) {
-            throw new UnauthorizedException("Seu perfil não possui permissão para esta operação.");
+            throw new ForbiddenException("Seu perfil não possui permissão para esta operação.");
         }
         return session;
     }
@@ -38,7 +40,7 @@ public class AuthorizationHandler {
         AuthenticatedSession session = requireAuthenticated(ctx);
         if (!session.userId().equals(requestedUserId)
                 && !session.hasAnyRole(UserRole.ADMIN, UserRole.ORGANIZER)) {
-            throw new UnauthorizedException("Não é permitido acessar ou alterar dados de outro participante.");
+            throw new ForbiddenException("Não é permitido acessar ou alterar dados de outro participante.");
         }
         return session;
     }

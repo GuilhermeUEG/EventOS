@@ -1,309 +1,350 @@
 package com.eventos.adapters.input.desktop;
 
-import com.eventos.application.dtos.AttendanceReportDto;
-import com.eventos.application.dtos.AttendanceStatusDto;
-import com.eventos.application.dtos.EnrolledReportDto;
-import com.eventos.application.dtos.SurveyResultsDto;
-import com.eventos.domain.model.Activity;
-import com.eventos.domain.model.ActivityLocation;
-import com.eventos.domain.model.ActivityType;
-import com.eventos.domain.model.AttendanceType;
-import com.eventos.domain.model.Event;
-import com.eventos.domain.model.EventStatus;
-import com.eventos.domain.model.FeedbackSurvey;
-import com.eventos.domain.model.Period;
-import com.eventos.domain.model.Speaker;
-import com.eventos.domain.model.SurveyQuestion;
-import com.eventos.domain.policies.AttendancePolicyFactory;
-import com.eventos.domain.policies.MandatoryActivitiesPolicy;
-import com.eventos.domain.policies.MinimumAttendancePercentagePolicy;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.eventos.adapters.input.desktop.DesktopModels.*;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Adaptador HTTP utilizado pelo desktop. A interface Swing não acessa casos de uso
- * ou repositórios diretamente: ela consome a mesma API REST do site público.
+ * Cliente HTTP da API REST usado pelo desktop. Consome exatamente o mesmo contrato do site público e
+ * nunca acessa casos de uso, domínio ou banco. Erros da API viram {@link ApiException} com a mensagem do servidor.
  */
 public class EventOsApiClient {
     private final String baseUrl;
-    private final HttpClient http = HttpClient.newHttpClient();
-    private final ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule());
-    private String token;
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    private final ObjectMapper json = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private volatile String token;
+    private volatile UserView currentUser;
 
     public EventOsApiClient(String baseUrl) {
-        this.baseUrl = baseUrl;
+        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     }
 
-    public void login(String email, String password) {
-        JsonNode response = sendJson("POST", "/api/auth/login",
-                Map.of("email", email, "password", password));
-        token = response.path("token").asText();
+    public UserView currentUser() {
+        return currentUser;
     }
 
-    public List<Event> listEvents() {
-        JsonNode response = send("GET", "/api/events", null);
-        List<Event> events = new ArrayList<>();
-        response.forEach(node -> events.add(mapEvent(node)));
-        return events;
+    // ------------------------------------------------------------------ autenticação e usuários
+
+    public UserView login(String email, String password) {
+        JsonNode response = send("POST", "/api/auth/login", Map.of("email", email, "password", password));
+        token = response.path("token").textValue();
+        currentUser = read(response.path("user"), UserView.class);
+        return currentUser;
     }
 
-    public Event createEvent(Event event) {
-        return mapEvent(sendJson("POST", "/api/events", eventPayload(event)));
+    /** Cadastro público: sempre cria um participante e não inicia sessão no desktop. */
+    public UserView register(String name, String email, String password) {
+        JsonNode response = send("POST", "/api/auth/register", Map.of("name", name, "email", email, "password", password));
+        return read(response.path("user"), UserView.class);
     }
 
-    public Event publishEvent(Long id) {
-        return mapEvent(send("POST", "/api/events/" + id + "/publish", "{}"));
+    public void logout() {
+        try {
+            if (token != null) send("POST", "/api/auth/logout", null);
+        } finally {
+            token = null;
+            currentUser = null;
+        }
     }
 
-    public Event cancelEvent(Long id) {
-        return mapEvent(send("POST", "/api/events/" + id + "/cancel", "{}"));
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        send("PUT", "/api/users/" + userId + "/password",
+                Map.of("currentPassword", currentPassword, "newPassword", newPassword));
     }
 
-    public Event finishEvent(Long id) {
-        return mapEvent(send("POST", "/api/events/" + id + "/finish", "{}"));
+    public List<UserView> listUsers() {
+        return readList(send("GET", "/api/users", null), UserView.class);
     }
 
-    public Activity addActivity(Long eventId, Activity activity) {
+    public UserView createUser(String name, String email, String password, String role) {
+        return read(send("POST", "/api/users",
+                Map.of("name", name, "email", email, "password", password, "role", role)), UserView.class);
+    }
+
+    public UserView changeRole(Long userId, String role) {
+        return read(send("PUT", "/api/users/" + userId + "/role", Map.of("role", role)), UserView.class);
+    }
+
+    // ------------------------------------------------------------------ eventos e atividades
+
+    public List<EventView> listEvents() {
+        return readList(send("GET", "/api/events", null), EventView.class);
+    }
+
+    public EventView createEvent(EventForm form) {
+        Map<String, Object> payload = eventPayload(form);
+        payload.put("certificatePolicy", policyPayload(form.policy()));
+        return read(send("POST", "/api/events", payload), EventView.class);
+    }
+
+    public EventView updateEvent(Long eventId, EventForm form) {
+        return read(send("PUT", "/api/events/" + eventId, eventPayload(form)), EventView.class);
+    }
+
+    public EventView publishEvent(Long id) {
+        return read(send("POST", "/api/events/" + id + "/publish", Map.of()), EventView.class);
+    }
+
+    public EventView cancelEvent(Long id) {
+        return read(send("POST", "/api/events/" + id + "/cancel", Map.of()), EventView.class);
+    }
+
+    public EventView finishEvent(Long id) {
+        return read(send("POST", "/api/events/" + id + "/finish", Map.of()), EventView.class);
+    }
+
+    public EventView changeCertificatePolicy(Long eventId, PolicyForm policy) {
+        return read(send("PUT", "/api/events/" + eventId + "/certificate-policy", policyPayload(policy)), EventView.class);
+    }
+
+    public ActivityView addActivity(Long eventId, ActivityForm form) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("title", form.title());
+        payload.put("description", form.description());
+        payload.put("start", form.start());
+        payload.put("end", form.end());
+        payload.put("room", form.room());
+        payload.put("track", form.track());
+        payload.put("capacity", form.capacity());
+        payload.put("type", form.type());
+        payload.put("attendancePolicy", form.attendancePolicy());
+        payload.put("requiresRegistration", form.requiresRegistration());
+        List<Map<String, Object>> speakers = new ArrayList<>();
+        for (SpeakerForm s : form.speakers()) {
+            speakers.add(Map.of("name", s.name(), "role", s.role() == null ? "" : s.role(),
+                    "bio", s.bio() == null ? "" : s.bio()));
+        }
+        payload.put("speakers", speakers);
+        return read(send("POST", "/api/events/" + eventId + "/activities", payload), ActivityView.class);
+    }
+
+    public List<ActivityView> listActivities(Long eventId) {
+        return listActivities(eventId, ActivityQuery.none());
+    }
+
+    /** Programação do evento com filtros combináveis aplicados pelo servidor. */
+    public List<ActivityView> listActivities(Long eventId, ActivityQuery query) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("date", query.date());
+        params.put("from", query.from());
+        params.put("to", query.to());
+        params.put("track", query.track());
+        params.put("type", query.type());
+        params.put("room", query.room());
+        params.put("search", query.search());
+        return readList(send("GET", "/api/events/" + eventId + "/activities" + queryString(params), null), ActivityView.class);
+    }
+
+    // ------------------------------------------------------------------ frequência
+
+    public QrCodeView generateQrCode(Long activityId) {
+        return read(send("GET", "/api/attendance/qr/generate/" + activityId, null), QrCodeView.class);
+    }
+
+    public List<AttendanceOverviewRow> attendanceOverview(Long activityId) {
+        return readList(send("GET", "/api/attendance/activity/" + activityId + "/overview", null), AttendanceOverviewRow.class);
+    }
+
+    public List<AttendanceRecordView> attendanceRecords(Long activityId) {
+        return readList(send("GET", "/api/attendance/activity/" + activityId, null), AttendanceRecordView.class);
+    }
+
+    public AttendanceRecordView recordManualAttendance(Long activityId, Long userId, String type, String notes) {
         Map<String, Object> payload = new HashMap<>();
-        payload.put("title", activity.getTitle());
-        payload.put("description", activity.getDescription());
-        payload.put("start", activity.getPeriod().getStart().toString());
-        payload.put("end", activity.getPeriod().getEnd().toString());
-        payload.put("room", activity.getLocation().getRoom());
-        payload.put("track", activity.getLocation().getSpaceOrTrack());
-        payload.put("capacity", activity.getMaxCapacity());
-        payload.put("type", activity.getType().name());
-        payload.put("attendancePolicy", activity.getAttendancePolicy().getPolicyKey());
-        payload.put("requiresRegistration", activity.isRequiresRegistration());
-        payload.put("speakers", activity.getSpeakers().stream().map(speaker -> Map.of(
-                "name", speaker.getName(),
-                "role", speaker.getRoleInActivity(),
-                "bio", speaker.getBio(),
-                "photoUrl", speaker.getPhotoUrl() == null ? "" : speaker.getPhotoUrl()
-        )).toList());
-        return mapActivity(sendJson("POST", "/api/events/" + eventId + "/activities", payload));
+        payload.put("activityId", activityId);
+        payload.put("userId", userId);
+        payload.put("type", type);
+        payload.put("notes", notes);
+        return read(send("POST", "/api/attendance/manual", payload), AttendanceRecordView.class);
     }
 
-    public List<Activity> listActivities(Long eventId) {
-        JsonNode response = send("GET", "/api/events/" + eventId + "/activities", null);
-        List<Activity> activities = new ArrayList<>();
-        response.forEach(node -> activities.add(mapActivity(node)));
-        return activities;
+    public AttendanceRecordView revokeAttendance(Long activityId, Long userId, String notes) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("activityId", activityId);
+        payload.put("userId", userId);
+        payload.put("notes", notes);
+        return read(send("POST", "/api/attendance/revoke", payload), AttendanceRecordView.class);
     }
 
-    public Activity getActivity(Long activityId) {
-        return mapActivity(send("GET", "/api/activities/" + activityId, null));
+    // ------------------------------------------------------------------ avaliações
+
+    public SurveyView createSurvey(Long activityId, SurveyForm form) {
+        List<Map<String, Object>> questions = new ArrayList<>();
+        for (QuestionForm q : form.questions()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("questionText", q.text());
+            item.put("type", q.type());
+            item.put("options", q.options());
+            item.put("required", q.required());
+            questions.add(item);
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("activityId", activityId);
+        payload.put("title", form.title());
+        payload.put("anonymous", form.anonymous());
+        payload.put("questions", questions);
+        return read(send("POST", "/api/surveys", payload), SurveyView.class);
     }
 
-    public String generateQrToken(Long activityId) {
-        return send("GET", "/api/attendance/qr/generate/" + activityId, null)
-                .path("qrToken").asText();
+    public SurveyResultsView surveyResults(Long activityId) {
+        return read(send("GET", "/api/surveys/activity/" + activityId + "/results", null), SurveyResultsView.class);
     }
 
-    public void recordManualAttendance(Long activityId, Long userId, AttendanceType type, String notes) {
-        sendJson("POST", "/api/attendance/manual", Map.of(
-                "activityId", activityId,
-                "userId", userId,
-                "type", type.name(),
-                "notes", notes
-        ));
+    // ------------------------------------------------------------------ relatórios e certificados
+
+    public EnrolledReportView enrolledReport(Long eventId) {
+        return read(send("GET", "/api/reports/enrolled/" + eventId, null), EnrolledReportView.class);
     }
 
-    public List<AttendanceStatusDto> attendanceOverview(Long activityId) {
-        JsonNode node = send("GET", "/api/attendance/activity/" + activityId + "/overview", null);
-        return convert(node, new TypeReference<List<AttendanceStatusDto>>() {});
-    }
-
-    public void createSurvey(FeedbackSurvey survey) {
-        List<Map<String, Object>> questions = survey.getQuestions().stream().map(this::questionPayload).toList();
-        sendJson("POST", "/api/surveys", Map.of(
-                "activityId", survey.getActivityId(),
-                "title", survey.getTitle(),
-                "questions", questions
-        ));
-    }
-
-    public SurveyResultsDto surveyResults(Long activityId) {
-        return convert(send("GET", "/api/surveys/activity/" + activityId + "/results", null),
-                new TypeReference<SurveyResultsDto>() {});
-    }
-
-    public EnrolledReportDto enrolledReport(Long eventId) {
-        return convert(send("GET", "/api/reports/enrolled/" + eventId, null),
-                new TypeReference<EnrolledReportDto>() {});
-    }
-
-    public AttendanceReportDto attendanceReport(Long eventId) {
-        return convert(send("GET", "/api/reports/attendance/" + eventId, null),
-                new TypeReference<AttendanceReportDto>() {});
+    public AttendanceReportView attendanceReport(Long eventId) {
+        return read(send("GET", "/api/reports/attendance/" + eventId, null), AttendanceReportView.class);
     }
 
     public byte[] enrolledCsv(Long eventId) {
-        return sendBytes("/api/reports/enrolled/" + eventId + "/csv");
+        return download("/api/reports/enrolled/" + eventId + "/csv");
+    }
+
+    public byte[] attendanceCsv(Long eventId) {
+        return download("/api/reports/attendance/" + eventId + "/csv");
     }
 
     public byte[] enrolledPdf(Long eventId) {
-        return sendBytes("/api/reports/enrolled/" + eventId + "/pdf");
+        return download("/api/reports/enrolled/" + eventId + "/pdf");
+    }
+
+    /** Declaração em PDF para palestrante/apresentador (RF-35). */
+    public byte[] speakerDeclarationPdf(Long activityId, Long speakerId) {
+        return download("/api/activities/" + activityId + "/speakers/" + speakerId + "/declaration");
     }
 
     public byte[] attendancePdf(Long eventId) {
-        return sendBytes("/api/reports/attendance/" + eventId + "/pdf");
+        return download("/api/reports/attendance/" + eventId + "/pdf");
     }
 
-    private Map<String, Object> eventPayload(Event event) {
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("title", event.getTitle());
-        payload.put("description", event.getDescription());
-        payload.put("start", event.getPeriod().getStart().toString());
-        payload.put("end", event.getPeriod().getEnd().toString());
-        payload.put("maxCapacity", event.getMaxCapacity());
-        payload.put("activitySelectionEnabled", event.isActivitySelectionEnabled());
-        payload.put("activitySelectionRequired", event.isActivitySelectionRequired());
-        payload.put("registrationDeadline", event.getRegistrationDeadline().toString());
-        payload.put("timeZone", event.getTimeZone());
-        payload.put("certPolicyType", event.getCertificateEligibilityPolicy() instanceof MandatoryActivitiesPolicy
-                ? "MANDATORY_COUNT" : "MIN_PERCENTAGE");
-        payload.put("certPolicyParam", event.getCertificateEligibilityPolicy() instanceof MinimumAttendancePercentagePolicy p
-                ? p.getMinPercentage() : 1);
+    public EligibilityView certificateEligibility(Long eventId, Long userId) {
+        return read(send("GET", "/api/certificates/eligibility/" + eventId + "/" + userId, null), EligibilityView.class);
+    }
+
+    // ------------------------------------------------------------------ montagem de requisições
+
+    private Map<String, Object> eventPayload(EventForm form) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("title", form.title());
+        payload.put("description", form.description());
+        payload.put("start", form.start());
+        payload.put("end", form.end());
+        payload.put("maxCapacity", form.maxCapacity());
+        payload.put("activitySelectionEnabled", form.selectionEnabled());
+        payload.put("activitySelectionRequired", form.selectionRequired());
+        if (form.registrationDeadline() != null && !form.registrationDeadline().isBlank()) {
+            payload.put("registrationDeadline", form.registrationDeadline());
+        }
+        payload.put("timeZone", form.timeZone());
         return payload;
     }
 
-    private Map<String, Object> questionPayload(SurveyQuestion question) {
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("questionText", question.getQuestionText());
-        payload.put("type", question.getType().name());
-        payload.put("options", question.getOptions());
-        payload.put("required", question.isRequired());
+    private Map<String, Object> policyPayload(PolicyForm policy) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", policy.type());
+        if (policy.percentage() != null) payload.put("percentage", policy.percentage());
+        if (policy.minActivities() != null) payload.put("minActivities", policy.minActivities());
+        if (policy.activityIds() != null) payload.put("activityIds", policy.activityIds());
         return payload;
     }
 
-    private Event mapEvent(JsonNode node) {
-        JsonNode period = node.path("period");
-        Event event = new Event(
-                node.path("id").asLong(),
-                node.path("title").asText(),
-                node.path("description").asText(""),
-                new Period(dateTime(period.path("start")), dateTime(period.path("end"))),
-                EventStatus.valueOf(node.path("status").asText()),
-                node.path("organizerId").isNull() ? null : node.path("organizerId").asLong(),
-                new ArrayList<>(),
-                node.path("maxCapacity").asInt(500),
-                new MinimumAttendancePercentagePolicy(75));
-        event.configureRegistration(
-                node.path("activitySelectionEnabled").asBoolean(true),
-                node.path("activitySelectionRequired").asBoolean(false),
-                dateTime(node.path("registrationDeadline")),
-                node.path("timeZone").asText("America/Sao_Paulo"));
-        return event;
+    private String queryString(Map<String, String> params) {
+        StringBuilder sb = new StringBuilder();
+        params.forEach((key, value) -> {
+            if (value == null || value.isBlank()) return;
+            sb.append(sb.length() == 0 ? '?' : '&').append(key).append('=')
+                    .append(URLEncoder.encode(value.trim(), StandardCharsets.UTF_8));
+        });
+        return sb.toString();
     }
 
-    private Activity mapActivity(JsonNode node) {
-        JsonNode period = node.path("period");
-        JsonNode location = node.path("location");
-        List<Speaker> speakers = new ArrayList<>();
-        node.path("speakers").forEach(s -> speakers.add(new Speaker(
-                s.path("id").isNull() ? null : s.path("id").asLong(),
-                s.path("name").asText(),
-                s.path("roleInActivity").asText(),
-                s.path("bio").asText(""),
-                s.path("photoUrl").isNull() ? null : s.path("photoUrl").asText())));
-        String policyKey = node.path("attendancePolicy").path("policyKey").asText("SINGLE_CHECKIN");
-        return new Activity(
-                node.path("id").asLong(),
-                node.path("eventId").asLong(),
-                node.path("title").asText(),
-                node.path("description").asText(""),
-                new Period(dateTime(period.path("start")), dateTime(period.path("end"))),
-                new ActivityLocation(location.path("room").asText(),
-                        location.path("spaceOrTrack").asText("Geral"),
-                        location.path("capacity").asInt(node.path("maxCapacity").asInt(50))),
-                ActivityType.valueOf(node.path("type").asText()),
-                node.path("maxCapacity").asInt(50),
-                node.path("currentEnrollments").asInt(0),
-                speakers,
-                AttendancePolicyFactory.create(policyKey),
-                node.path("requiresRegistration").asBoolean(true));
-    }
+    // ------------------------------------------------------------------ transporte
 
-    private LocalDateTime dateTime(JsonNode node) {
-        if (node == null || node.isNull() || node.isMissingNode()) return LocalDateTime.now();
-        if (node.isArray()) {
-            return LocalDateTime.of(node.get(0).asInt(), node.get(1).asInt(), node.get(2).asInt(),
-                    node.size() > 3 ? node.get(3).asInt() : 0,
-                    node.size() > 4 ? node.get(4).asInt() : 0,
-                    node.size() > 5 ? node.get(5).asInt() : 0);
-        }
-        return LocalDateTime.parse(node.asText());
-    }
-
-    private JsonNode sendJson(String method, String path, Object body) {
-        try {
-            return send(method, path, json.writeValueAsString(body));
-        } catch (Exception e) {
-            throw new IllegalStateException("Falha ao serializar requisição.", e);
-        }
-    }
-
-    private JsonNode send(String method, String path, String body) {
+    private JsonNode send(String method, String path, Object body) {
         try {
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                    .timeout(Duration.ofSeconds(30))
                     .header("Accept", "application/json");
             if (token != null) request.header("Authorization", "Bearer " + token);
             if (body == null) {
                 request.method(method, HttpRequest.BodyPublishers.noBody());
             } else {
                 request.header("Content-Type", "application/json")
-                        .method(method, HttpRequest.BodyPublishers.ofString(body));
+                        .method(method, HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
             }
             HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                JsonNode error = json.readTree(response.body());
-                throw new IllegalStateException(error.path("error").asText("Erro HTTP " + response.statusCode()));
+                throw new ApiException(response.statusCode(), errorMessage(response.statusCode(), response.body()));
             }
-            return response.body().isBlank() ? json.createObjectNode() : json.readTree(response.body());
+            return response.body() == null || response.body().isBlank() ? json.createObjectNode() : json.readTree(response.body());
+        } catch (ApiException e) {
+            throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Requisição interrompida.", e);
+            throw new ApiException("Requisição interrompida.", e);
         } catch (Exception e) {
-            if (e instanceof IllegalStateException state) throw state;
-            throw new IllegalStateException("Falha de comunicação com a API: " + e.getMessage(), e);
+            throw new ApiException("Não foi possível se comunicar com o servidor: " + e.getMessage(), e);
         }
     }
 
-    private byte[] sendBytes(String path) {
+    private byte[] download(String path) {
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + path))
-                    .header("Authorization", "Bearer " + token).GET().build();
-            HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofSeconds(60));
+            if (token != null) request.header("Authorization", "Bearer " + token);
+            HttpResponse<byte[]> response = http.send(request.GET().build(), HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("Falha no download: HTTP " + response.statusCode());
+                throw new ApiException(response.statusCode(),
+                        errorMessage(response.statusCode(), new String(response.body(), StandardCharsets.UTF_8)));
             }
             return response.body();
+        } catch (ApiException e) {
+            throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Download interrompido.", e);
+            throw new ApiException("Download interrompido.", e);
         } catch (Exception e) {
-            if (e instanceof IllegalStateException state) throw state;
-            throw new IllegalStateException("Falha no download: " + e.getMessage(), e);
+            throw new ApiException("Falha no download: " + e.getMessage(), e);
         }
     }
 
-    private <T> T convert(JsonNode node, TypeReference<T> type) {
+    private String errorMessage(int status, String body) {
         try {
-            return json.convertValue(node, type);
-        } catch (Exception e) {
-            throw new IllegalStateException("Resposta inválida da API.", e);
+            String message = json.readTree(body).path("error").asText();
+            if (!message.isBlank()) return message;
+        } catch (Exception ignored) {
+            // corpo não é JSON: usa a mensagem genérica abaixo
         }
+        return "Erro HTTP " + status + " ao processar a requisição.";
+    }
+
+    private <T> T read(JsonNode node, Class<T> type) {
+        try {
+            return json.treeToValue(node, type);
+        } catch (Exception e) {
+            throw new ApiException("Resposta inválida da API.", e);
+        }
+    }
+
+    private <T> List<T> readList(JsonNode node, Class<T> type) {
+        List<T> result = new ArrayList<>();
+        node.forEach(item -> result.add(read(item, type)));
+        return result;
     }
 }
