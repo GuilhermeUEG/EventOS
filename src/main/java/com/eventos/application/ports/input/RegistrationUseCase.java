@@ -7,10 +7,17 @@ import java.util.Set;
 
 public interface RegistrationUseCase {
     Registration registerForEvent(Long eventId, Long userId, Set<Long> activityIds);
+
     Registration addActivityToRegistration(Long eventId, Long userId, Long activityId);
+
     Registration removeActivityFromRegistration(Long eventId, Long userId, Long activityId);
+
     void cancelRegistration(Long eventId, Long userId);
+
     List<Registration> getEventRegistrations(Long eventId);
+
     List<Registration> getUserRegistrations(Long userId);
+
+    /** Agenda pessoal em ordem cronológica (RF-16, RF-17, RN-08). */
     List<Activity> getParticipantAgenda(Long userId, Long eventId);
 }

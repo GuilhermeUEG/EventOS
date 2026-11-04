@@ -5,7 +5,13 @@ import java.util.List;
 
 public interface AttendanceRepository {
     AttendanceRecord save(AttendanceRecord record);
+
     List<AttendanceRecord> findByActivityId(Long activityId);
+
     List<AttendanceRecord> findByActivityAndUser(Long activityId, Long userId);
+
     List<AttendanceRecord> findByUserAndEvent(Long userId, Long eventId);
+
+    /** Todos os registros das atividades de um evento, em uma única consulta (relatórios). */
+    List<AttendanceRecord> findByEventId(Long eventId);
 }

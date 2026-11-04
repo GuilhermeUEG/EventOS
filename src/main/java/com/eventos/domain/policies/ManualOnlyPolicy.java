@@ -3,6 +3,7 @@ package com.eventos.domain.policies;
 import com.eventos.domain.model.AttendanceRecord;
 import com.eventos.domain.model.AttendanceStatus;
 import com.eventos.domain.model.AttendanceType;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class ManualOnlyPolicy implements AttendancePolicy {
@@ -25,10 +26,13 @@ public class ManualOnlyPolicy implements AttendancePolicy {
 
     @Override
     public AttendanceStatus evaluate(List<AttendanceRecord> records) {
-        if (records == null || records.isEmpty()) {
-            return AttendanceStatus.ABSENT;
-        }
-        boolean hasManual = records.stream().anyMatch(r -> r.getType() == AttendanceType.MANUAL_ENTRY);
+        boolean hasManual = AttendanceRecord.effective(records).stream()
+                .anyMatch(r -> r.getType() == AttendanceType.MANUAL_ENTRY);
         return hasManual ? AttendanceStatus.PRESENT : AttendanceStatus.ABSENT;
+    }
+
+    @Override
+    public AttendanceDecision decideQrMark(List<AttendanceRecord> records, LocalDateTime now) {
+        return AttendanceDecision.rejected("Esta atividade aceita somente validação manual de frequência.");
     }
 }

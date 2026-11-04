@@ -6,7 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Pergunta de questionário de avaliação com validação polimórfica (RF-24, RF-25, ROO-01).
+ * Pergunta de questionário de avaliação (RF-24, RF-25, ROO-01). A validação e a consolidação
+ * específicas de cada tipo são delegadas ao {@link QuestionType}.
  */
 public class SurveyQuestion implements Serializable {
     private final Long id;
@@ -22,10 +23,15 @@ public class SurveyQuestion implements Serializable {
         if (type == null) {
             throw new ValidationException("O tipo da questão é obrigatório.");
         }
+        List<String> cleanOptions = new ArrayList<>();
+        if (options != null) {
+            options.stream().filter(o -> o != null && !o.isBlank()).map(String::trim).forEach(cleanOptions::add);
+        }
+        type.validateDefinition(cleanOptions);
         this.id = id;
         this.questionText = questionText.trim();
         this.type = type;
-        this.options = options != null ? new ArrayList<>(options) : new ArrayList<>();
+        this.options = cleanOptions;
         this.required = required;
     }
 
@@ -50,26 +56,17 @@ public class SurveyQuestion implements Serializable {
     }
 
     public void validateAnswer(String answer) {
-        if (required && (answer == null || answer.trim().isEmpty())) {
-            throw new ValidationException("A pergunta '" + questionText + "' é de resposta obrigatória.");
-        }
-        if (answer == null || answer.trim().isEmpty()) {
+        boolean blank = answer == null || answer.trim().isEmpty();
+        if (blank) {
+            if (required) {
+                throw new ValidationException("A pergunta '" + questionText + "' é de resposta obrigatória.");
+            }
             return;
         }
+        type.validateAnswer(answer.trim(), options, questionText);
+    }
 
-        if (type == QuestionType.RATING_SCALE) {
-            try {
-                int rating = Integer.parseInt(answer.trim());
-                if (rating < 1 || rating > 5) {
-                    throw new ValidationException("Nota de avaliação deve estar entre 1 e 5.");
-                }
-            } catch (NumberFormatException e) {
-                throw new ValidationException("Resposta para escala numérica deve ser um número inteiro de 1 a 5.");
-            }
-        } else if (type == QuestionType.SINGLE_CHOICE && !options.isEmpty()) {
-            if (!options.contains(answer.trim())) {
-                throw new ValidationException("Opção selecionada inválida para a pergunta '" + questionText + "'.");
-            }
-        }
+    public QuestionSummary summarize(List<SurveyAnswer> answers) {
+        return type.summarize(answers, options);
     }
 }

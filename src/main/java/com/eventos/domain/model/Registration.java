@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Inscrição de um participante em um evento e suas atividades escolhidas (RF-12, RF-15, RF-16, RN-05).
+ * Inscrição de um participante em um evento e suas atividades escolhidas (RF-12, RF-15, RF-16, RN-05, RN-08).
  */
 public class Registration implements Serializable {
     private final Long id;
@@ -67,6 +67,9 @@ public class Registration implements Serializable {
     }
 
     public void removeActivity(Long activityId) {
+        if (this.status == RegistrationStatus.CANCELLED) {
+            throw new BusinessRuleException("Inscrição cancelada não pode alterar atividades.");
+        }
         if (activityId != null) {
             this.selectedActivityIds.remove(activityId);
         }
@@ -79,8 +82,25 @@ public class Registration implements Serializable {
         this.status = RegistrationStatus.CANCELLED;
     }
 
+    /** Nova inscrição confirmada que reaproveita a identidade desta (reinscrição após cancelamento). */
+    public Registration reconfirm(Set<Long> activityIds, LocalDateTime when) {
+        if (this.status != RegistrationStatus.CANCELLED) {
+            throw new BusinessRuleException("Você já está inscrito neste evento.");
+        }
+        return new Registration(id, eventId, userId, activityIds, when, RegistrationStatus.CONFIRMED);
+    }
+
     public boolean isConfirmed() {
         return this.status == RegistrationStatus.CONFIRMED;
+    }
+
+    /**
+     * O participante está inscrito na atividade? Inscrição confirmada no evento e, quando a
+     * atividade controla inscrição própria, escolha explícita dela (RN-05, RN-08, RN-13).
+     */
+    public boolean grantsAccessTo(Activity activity) {
+        if (!isConfirmed() || activity == null || !Objects.equals(eventId, activity.getEventId())) return false;
+        return !activity.isRequiresRegistration() || selectedActivityIds.contains(activity.getId());
     }
 
     @Override

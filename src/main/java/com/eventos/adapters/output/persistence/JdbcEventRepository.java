@@ -1,13 +1,14 @@
 package com.eventos.adapters.output.persistence;
 
 import com.eventos.application.ports.output.EventRepository;
+import com.eventos.domain.exceptions.ValidationException;
 import com.eventos.domain.model.ActivityType;
 import com.eventos.domain.model.Event;
 import com.eventos.domain.model.EventStatus;
 import com.eventos.domain.model.Period;
 import com.eventos.domain.policies.CertificateEligibilityPolicy;
-import com.eventos.domain.policies.MandatoryActivitiesPolicy;
-import com.eventos.domain.policies.MinimumAttendancePercentagePolicy;
+import com.eventos.domain.policies.CertificatePolicyFactory;
+import com.eventos.domain.policies.CertificatePolicySpec;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,30 +16,31 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JdbcEventRepository implements EventRepository {
+    private static final Logger log = LoggerFactory.getLogger(JdbcEventRepository.class);
 
     @Override
     public Event save(Event event) {
-        String policyType = "MIN_PERCENTAGE";
-        double policyParam = 75.0;
-        if (event.getCertificateEligibilityPolicy() instanceof MandatoryActivitiesPolicy p) {
-            policyType = "MANDATORY_COUNT";
-            policyParam = p.getMinMandatoryCount();
-        } else if (event.getCertificateEligibilityPolicy() instanceof MinimumAttendancePercentagePolicy p) {
-            policyType = "MIN_PERCENTAGE";
-            policyParam = p.getMinPercentage();
-        }
+        CertificatePolicySpec spec = event.getCertificateEligibilityPolicy().spec();
+        double policyParam = spec.percentage() != null ? spec.percentage()
+                : spec.minActivities() != null ? spec.minActivities() : 0.0;
+        String policyActivities = spec.activityIds().stream().map(String::valueOf).collect(Collectors.joining(","));
 
         if (event.getId() == null) {
             String sql = """
                     INSERT INTO events
                     (title, description, start_date, end_date, status, organizer_id, max_capacity,
-                     cert_policy_type, cert_policy_param, activity_selection_enabled,
+                     cert_policy_type, cert_policy_param, cert_policy_activities, activity_selection_enabled,
                      activity_selection_required, registration_deadline, time_zone)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """;
             try (Connection conn = DatabaseManager.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -47,18 +49,20 @@ public class JdbcEventRepository implements EventRepository {
                 stmt.setTimestamp(3, Timestamp.valueOf(event.getPeriod().getStart()));
                 stmt.setTimestamp(4, Timestamp.valueOf(event.getPeriod().getEnd()));
                 stmt.setString(5, event.getStatus().name());
-                if (event.getOrganizerId() != null) stmt.setLong(6, event.getOrganizerId()); else stmt.setNull(6, java.sql.Types.BIGINT);
+                if (event.getOrganizerId() != null) stmt.setLong(6, event.getOrganizerId());
+                else stmt.setNull(6, java.sql.Types.BIGINT);
                 stmt.setInt(7, event.getMaxCapacity());
-                stmt.setString(8, policyType);
+                stmt.setString(8, spec.type());
                 stmt.setDouble(9, policyParam);
-                stmt.setBoolean(10, event.isActivitySelectionEnabled());
-                stmt.setBoolean(11, event.isActivitySelectionRequired());
+                stmt.setString(10, policyActivities);
+                stmt.setBoolean(11, event.isActivitySelectionEnabled());
+                stmt.setBoolean(12, event.isActivitySelectionRequired());
                 if (event.getRegistrationDeadline() != null) {
-                    stmt.setTimestamp(12, Timestamp.valueOf(event.getRegistrationDeadline()));
+                    stmt.setTimestamp(13, Timestamp.valueOf(event.getRegistrationDeadline()));
                 } else {
-                    stmt.setNull(12, java.sql.Types.TIMESTAMP);
+                    stmt.setNull(13, java.sql.Types.TIMESTAMP);
                 }
-                stmt.setString(13, event.getTimeZone());
+                stmt.setString(14, event.getTimeZone());
                 stmt.executeUpdate();
                 try (ResultSet rs = stmt.getGeneratedKeys()) {
                     if (rs.next()) {
@@ -71,41 +75,42 @@ public class JdbcEventRepository implements EventRepository {
                     }
                 }
             } catch (SQLException e) {
-                throw new RuntimeException("Erro ao inserir evento: " + e.getMessage(), e);
+                throw new IllegalStateException("Erro ao inserir evento: " + e.getMessage(), e);
             }
-        } else {
-            String sql = """
-                    UPDATE events SET title = ?, description = ?, start_date = ?, end_date = ?,
-                    status = ?, max_capacity = ?, cert_policy_type = ?, cert_policy_param = ?,
-                    activity_selection_enabled = ?, activity_selection_required = ?,
-                    registration_deadline = ?, time_zone = ? WHERE id = ?
-                    """;
-            try (Connection conn = DatabaseManager.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, event.getTitle());
-                stmt.setString(2, event.getDescription());
-                stmt.setTimestamp(3, Timestamp.valueOf(event.getPeriod().getStart()));
-                stmt.setTimestamp(4, Timestamp.valueOf(event.getPeriod().getEnd()));
-                stmt.setString(5, event.getStatus().name());
-                stmt.setInt(6, event.getMaxCapacity());
-                stmt.setString(7, policyType);
-                stmt.setDouble(8, policyParam);
-                stmt.setBoolean(9, event.isActivitySelectionEnabled());
-                stmt.setBoolean(10, event.isActivitySelectionRequired());
-                if (event.getRegistrationDeadline() != null) {
-                    stmt.setTimestamp(11, Timestamp.valueOf(event.getRegistrationDeadline()));
-                } else {
-                    stmt.setNull(11, java.sql.Types.TIMESTAMP);
-                }
-                stmt.setString(12, event.getTimeZone());
-                stmt.setLong(13, event.getId());
-                stmt.executeUpdate();
-                return event;
-            } catch (SQLException e) {
-                throw new RuntimeException("Erro ao atualizar evento: " + e.getMessage(), e);
-            }
+            return event;
         }
-        return event;
+
+        String sql = """
+                UPDATE events SET title = ?, description = ?, start_date = ?, end_date = ?,
+                status = ?, max_capacity = ?, cert_policy_type = ?, cert_policy_param = ?,
+                cert_policy_activities = ?, activity_selection_enabled = ?, activity_selection_required = ?,
+                registration_deadline = ?, time_zone = ? WHERE id = ?
+                """;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, event.getTitle());
+            stmt.setString(2, event.getDescription());
+            stmt.setTimestamp(3, Timestamp.valueOf(event.getPeriod().getStart()));
+            stmt.setTimestamp(4, Timestamp.valueOf(event.getPeriod().getEnd()));
+            stmt.setString(5, event.getStatus().name());
+            stmt.setInt(6, event.getMaxCapacity());
+            stmt.setString(7, spec.type());
+            stmt.setDouble(8, policyParam);
+            stmt.setString(9, policyActivities);
+            stmt.setBoolean(10, event.isActivitySelectionEnabled());
+            stmt.setBoolean(11, event.isActivitySelectionRequired());
+            if (event.getRegistrationDeadline() != null) {
+                stmt.setTimestamp(12, Timestamp.valueOf(event.getRegistrationDeadline()));
+            } else {
+                stmt.setNull(12, java.sql.Types.TIMESTAMP);
+            }
+            stmt.setString(13, event.getTimeZone());
+            stmt.setLong(14, event.getId());
+            stmt.executeUpdate();
+            return event;
+        } catch (SQLException e) {
+            throw new IllegalStateException("Erro ao atualizar evento: " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -118,7 +123,7 @@ public class JdbcEventRepository implements EventRepository {
                 if (rs.next()) return Optional.of(mapRow(rs));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao buscar evento por ID: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao buscar evento por ID: " + e.getMessage(), e);
         }
         return Optional.empty();
     }
@@ -132,7 +137,7 @@ public class JdbcEventRepository implements EventRepository {
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) list.add(mapRow(rs));
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao listar eventos: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao listar eventos: " + e.getMessage(), e);
         }
         return list;
     }
@@ -144,7 +149,6 @@ public class JdbcEventRepository implements EventRepository {
             sql.append("JOIN activities a ON a.event_id = e.id ");
         }
         sql.append("WHERE 1=1 ");
-
         List<Object> params = new ArrayList<>();
         if (search != null && !search.trim().isEmpty()) {
             sql.append("AND (LOWER(e.title) LIKE ? OR LOWER(e.description) LIKE ?) ");
@@ -165,7 +169,6 @@ public class JdbcEventRepository implements EventRepository {
             params.add(type.name());
         }
         sql.append("ORDER BY e.start_date DESC");
-
         List<Event> list = new ArrayList<>();
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
@@ -176,7 +179,7 @@ public class JdbcEventRepository implements EventRepository {
                 while (rs.next()) list.add(mapRow(rs));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao filtrar eventos: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao filtrar eventos: " + e.getMessage(), e);
         }
         return list;
     }
@@ -189,17 +192,11 @@ public class JdbcEventRepository implements EventRepository {
             stmt.setLong(1, id);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao excluir evento: " + e.getMessage(), e);
+            throw new IllegalStateException("Erro ao excluir evento: " + e.getMessage(), e);
         }
     }
 
     private Event mapRow(ResultSet rs) throws SQLException {
-        String polType = rs.getString("cert_policy_type");
-        double polParam = rs.getDouble("cert_policy_param");
-        CertificateEligibilityPolicy policy = "MANDATORY_COUNT".equalsIgnoreCase(polType)
-                ? new MandatoryActivitiesPolicy((int) polParam)
-                : new MinimumAttendancePercentagePolicy(polParam > 0 ? polParam : 75.0);
-
         Event event = new Event(
                 rs.getLong("id"),
                 rs.getString("title"),
@@ -209,14 +206,32 @@ public class JdbcEventRepository implements EventRepository {
                 rs.getObject("organizer_id") != null ? rs.getLong("organizer_id") : null,
                 new ArrayList<>(),
                 rs.getInt("max_capacity"),
-                policy
+                readPolicy(rs)
         );
         Timestamp deadline = rs.getTimestamp("registration_deadline");
         event.configureRegistration(
                 rs.getBoolean("activity_selection_enabled"),
                 rs.getBoolean("activity_selection_required"),
                 deadline != null ? deadline.toLocalDateTime() : event.getPeriod().getStart(),
-                rs.getString("time_zone") != null ? rs.getString("time_zone") : "America/Sao_Paulo");
+                rs.getString("time_zone") != null ? rs.getString("time_zone") : Event.DEFAULT_TIME_ZONE);
         return event;
+    }
+
+    private CertificateEligibilityPolicy readPolicy(ResultSet rs) throws SQLException {
+        String type = rs.getString("cert_policy_type");
+        double param = rs.getDouble("cert_policy_param");
+        String activitiesCsv = rs.getString("cert_policy_activities");
+        Set<Long> activityIds = new HashSet<>();
+        if (activitiesCsv != null && !activitiesCsv.isBlank()) {
+            for (String id : activitiesCsv.split(",")) activityIds.add(Long.parseLong(id.trim()));
+        }
+        try {
+            return CertificatePolicyFactory.create(new CertificatePolicySpec(
+                    type == null ? "MIN_PERCENTAGE" : type, param > 0 ? param : null, param >= 1 ? (int) param : null, activityIds));
+        } catch (ValidationException e) {
+            log.warn("Política de certificado inválida no evento {} ({}); usando a política padrão.",
+                    rs.getLong("id"), e.getMessage());
+            return CertificatePolicyFactory.defaultPolicy();
+        }
     }
 }

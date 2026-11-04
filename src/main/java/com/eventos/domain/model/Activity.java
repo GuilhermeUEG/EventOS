@@ -2,30 +2,37 @@ package com.eventos.domain.model;
 
 import com.eventos.domain.exceptions.BusinessRuleException;
 import com.eventos.domain.exceptions.ValidationException;
+import com.eventos.domain.policies.AttendanceDecision;
 import com.eventos.domain.policies.AttendancePolicy;
 import com.eventos.domain.policies.SingleCheckInPolicy;
 import java.io.Serializable;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * Entidade de Atividade rica com invariantes de capacidade e políticas (ROO-01, ROO-02, RF-05, RF-14).
+ * Entidade de Atividade rica com invariantes de capacidade e política de frequência
+ * (ROO-01, ROO-02, RF-05, RF-14, RN-09).
+ *
+ * <p>A política de frequência é definida na criação e não pode ser trocada depois: mudar a regra
+ * de uma atividade já em andamento alteraria silenciosamente a situação de presença consolidada (RN-16).</p>
  */
 public class Activity implements Serializable {
     private final Long id;
     private Long eventId;
-    private String title;
-    private String description;
-    private Period period;
-    private ActivityLocation location;
-    private ActivityType type;
-    private int maxCapacity;
+    private final String title;
+    private final String description;
+    private final Period period;
+    private final ActivityLocation location;
+    private final ActivityType type;
+    private final int maxCapacity;
     private int currentEnrollments;
     private final List<Speaker> speakers;
-    private AttendancePolicy attendancePolicy;
-    private boolean requiresRegistration;
+    private final AttendancePolicy attendancePolicy;
+    private final boolean requiresRegistration;
 
     public Activity(Long id, Long eventId, String title, String description,
                     Period period, ActivityLocation location, ActivityType type,
@@ -62,7 +69,8 @@ public class Activity implements Serializable {
         return eventId;
     }
 
-    public void setEventId(Long eventId) {
+    /** Somente o agregado {@link Event} vincula uma atividade a si mesmo. */
+    void assignToEvent(Long eventId) {
         this.eventId = eventId;
     }
 
@@ -106,12 +114,6 @@ public class Activity implements Serializable {
         return requiresRegistration;
     }
 
-    public void setAttendancePolicy(AttendancePolicy policy) {
-        if (policy != null) {
-            this.attendancePolicy = policy;
-        }
-    }
-
     public boolean hasAvailableSlots() {
         return !requiresRegistration || currentEnrollments < maxCapacity;
     }
@@ -120,10 +122,15 @@ public class Activity implements Serializable {
         return Math.max(0, maxCapacity - currentEnrollments);
     }
 
-    public void bookSlot() {
-        if (requiresRegistration && !hasAvailableSlots()) {
+    /** Falha se a atividade controla vagas e já está lotada. */
+    public void assertHasAvailableSlot() {
+        if (!hasAvailableSlots()) {
             throw new BusinessRuleException("A atividade '" + title + "' atingiu a capacidade máxima (" + maxCapacity + " vagas).");
         }
+    }
+
+    public void bookSlot() {
+        assertHasAvailableSlot();
         this.currentEnrollments++;
     }
 
@@ -138,17 +145,28 @@ public class Activity implements Serializable {
         this.speakers.add(speaker);
     }
 
+    /** Mesmo local, com horários sobrepostos (RF-07, RN-07). */
     public boolean conflictsWith(Activity other) {
-        if (other == null || Objects.equals(this.id, other.id)) return false;
-        // Mesmo local e horários sobrepostos
-        if (this.location.getRoom().equalsIgnoreCase(other.location.getRoom()) && this.period.overlaps(other.period)) {
-            return true;
-        }
-        return false;
+        if (other == null || (this.id != null && Objects.equals(this.id, other.id))) return false;
+        return this.location.getRoom().equalsIgnoreCase(other.location.getRoom()) && this.period.overlaps(other.period);
+    }
+
+    /** Horários sobrepostos, independentemente do local (conflito na agenda do participante). */
+    public boolean overlapsInTimeWith(Activity other) {
+        if (other == null || (this.id != null && Objects.equals(this.id, other.id))) return false;
+        return this.period.overlaps(other.period);
+    }
+
+    public boolean occursOn(LocalDate date) {
+        return date != null && !date.isBefore(period.getStart().toLocalDate()) && !date.isAfter(period.getEnd().toLocalDate());
     }
 
     public AttendanceStatus evaluateAttendance(List<AttendanceRecord> records) {
-        return this.attendancePolicy.evaluate(records);
+        return this.attendancePolicy.evaluate(AttendanceRecord.effective(records));
+    }
+
+    public AttendanceDecision decideQrMark(List<AttendanceRecord> records, LocalDateTime now) {
+        return this.attendancePolicy.decideQrMark(AttendanceRecord.effective(records), now);
     }
 
     @Override
@@ -156,11 +174,11 @@ public class Activity implements Serializable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Activity activity = (Activity) o;
-        return Objects.equals(id, activity.id);
+        return id != null && Objects.equals(id, activity.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id);
+        return id != null ? Objects.hash(id) : System.identityHashCode(this);
     }
 }

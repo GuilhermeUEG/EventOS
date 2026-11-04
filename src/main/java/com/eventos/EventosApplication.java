@@ -1,9 +1,15 @@
 package com.eventos;
 
-import com.eventos.adapters.input.desktop.SwingDesktopApp;
-import com.eventos.adapters.input.desktop.EventOsApiClient;
+import com.eventos.adapters.input.desktop.DesktopLauncher;
+import com.eventos.adapters.input.rest.ApiJson;
+import com.eventos.adapters.input.rest.DemoController;
 import com.eventos.adapters.input.rest.RestApiController;
+import com.eventos.adapters.output.email.SmtpEmailAdapter;
+import com.eventos.adapters.output.email.SmtpSettings;
+import com.eventos.adapters.output.email.UnconfiguredEmailAdapter;
 import com.eventos.adapters.output.pdf.OpenPdfGeneratorAdapter;
+import com.eventos.adapters.output.persistence.JdbcCertificateDeliveryRepository;
+import com.eventos.application.ports.output.EmailSenderPort;
 import com.eventos.adapters.output.persistence.DatabaseManager;
 import com.eventos.adapters.output.persistence.DatabaseSeeder;
 import com.eventos.adapters.output.persistence.JdbcActivityRepository;
@@ -13,8 +19,9 @@ import com.eventos.adapters.output.persistence.JdbcEventRepository;
 import com.eventos.adapters.output.persistence.JdbcRegistrationRepository;
 import com.eventos.adapters.output.persistence.JdbcSurveyRepository;
 import com.eventos.adapters.output.persistence.JdbcUserRepository;
-import com.eventos.adapters.output.security.Pbkdf2SecurityAdapter;
+import com.eventos.adapters.output.qr.ZxingQrCodeAdapter;
 import com.eventos.adapters.output.security.InMemorySessionStore;
+import com.eventos.adapters.output.security.Pbkdf2SecurityAdapter;
 import com.eventos.application.ports.input.AttendanceUseCase;
 import com.eventos.application.ports.input.AuthUseCase;
 import com.eventos.application.ports.input.CertificateUseCase;
@@ -31,28 +38,38 @@ import com.eventos.application.services.ReportServiceImpl;
 import com.eventos.application.services.SurveyServiceImpl;
 import io.javalin.Javalin;
 import io.javalin.http.staticfiles.Location;
-import io.javalin.json.JavalinJackson;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.awt.GraphicsEnvironment;
-import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
+import java.util.Arrays;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * Ponto de Entrada Principal da Plataforma EventOS.
- * Realiza a injeção manual de dependências (Arquitetura Hexagonal pura sem Spring Boot).
+ * Composition root da plataforma EventOS: único lugar que conhece as implementações concretas.
+ * Cria adaptadores de saída, casos de uso e adaptadores de entrada e os conecta por portas, sem
+ * framework de injeção (arquitetura hexagonal, sem Spring).
+ *
+ * <p>Argumentos: {@code --seed-large} cria a base de carga (500 participantes e 100 atividades);
+ * {@code --no-desktop} sobe somente API e site. Variáveis: {@code EVENTOS_PORT},
+ * {@code EVENTOS_DEMO_MODE} (padrão ligado), {@code EVENTOS_DB_URL}, {@code EVENTOS_QR_SECRET},
+ * {@code EVENTOS_PUBLIC_URL} (endereço público para os links dos PDFs), {@code EVENTOS_SMTP_*} (envio de e-mail) e
+ * {@code EVENTOS_ADMIN_EMAIL}/{@code EVENTOS_ADMIN_PASSWORD}/{@code EVENTOS_ADMIN_NAME} (cria o primeiro administrador).</p>
  */
 public class EventosApplication {
+    private static final Logger log = LoggerFactory.getLogger(EventosApplication.class);
 
     public static void main(String[] args) {
-        System.out.println("========================================================================");
-        System.out.println("   EventOS - Plataforma de Gestão de Eventos (POO II 2026)");
-        System.out.println("========================================================================");
+        boolean seedLarge = Arrays.asList(args).contains("--seed-large")
+                || "true".equalsIgnoreCase(System.getenv("EVENTOS_SEED_LARGE"));
+        boolean noDesktop = Arrays.asList(args).contains("--no-desktop");
+        boolean demoMode = !"false".equalsIgnoreCase(System.getenv("EVENTOS_DEMO_MODE"));
+        int port = resolvePort();
 
-        // 1. Inicializa Banco de Dados Relacional H2 (RNF-04)
+        log.info("EventOS - Plataforma de Gestão de Eventos (POO II)");
+
+        // 1. Banco relacional H2: cria ou evolui o esquema por scripts versionados.
         DatabaseManager.initializeDatabase();
 
-        // 2. Instancia Repositórios e Adaptadores de Saída (JDBC Puro, Segurança SHA-256 e OpenPDF)
+        // 2. Adaptadores de saída.
         JdbcUserRepository userRepository = new JdbcUserRepository();
         JdbcEventRepository eventRepository = new JdbcEventRepository();
         JdbcActivityRepository activityRepository = new JdbcActivityRepository();
@@ -60,55 +77,90 @@ public class EventosApplication {
         JdbcAttendanceRepository attendanceRepository = new JdbcAttendanceRepository();
         JdbcSurveyRepository surveyRepository = new JdbcSurveyRepository();
         JdbcCertificateRepository certificateRepository = new JdbcCertificateRepository();
-
         Pbkdf2SecurityAdapter securityAdapter = new Pbkdf2SecurityAdapter();
         InMemorySessionStore sessionStore = new InMemorySessionStore();
-        OpenPdfGeneratorAdapter pdfGeneratorAdapter = new OpenPdfGeneratorAdapter();
+        // Endereço público usado nos PDFs para validar certificados. Em servidor, defina EVENTOS_PUBLIC_URL.
+        String publicUrl = resolvePublicUrl(port);
+        OpenPdfGeneratorAdapter pdfGenerator = new OpenPdfGeneratorAdapter(publicUrl);
+        ZxingQrCodeAdapter qrCodeGenerator = new ZxingQrCodeAdapter();
+        JdbcCertificateDeliveryRepository deliveryRepository = new JdbcCertificateDeliveryRepository();
+        EmailSenderPort emailSender = SmtpSettings.fromEnvironment()
+                .<EmailSenderPort>map(SmtpEmailAdapter::new)
+                .orElseGet(UnconfiguredEmailAdapter::new);
+        log.info("Envio de e-mail de certificados: {}", emailSender instanceof SmtpEmailAdapter ? "SMTP configurado" : "não configurado (falhas serão registradas)");
 
-        // 3. Povoamento de Dados de Demonstração (Seed Demo Data para CA-01 a CA-08)
-        DatabaseSeeder.seedDemoData(userRepository, eventRepository, activityRepository, registrationRepository, attendanceRepository, surveyRepository);
+        // 3. Dados de demonstração.
+        if (demoMode) {
+            DatabaseSeeder.seedDemoData(userRepository, eventRepository, activityRepository,
+                    registrationRepository, attendanceRepository, surveyRepository);
+        }
+        String adminEmail = System.getenv("EVENTOS_ADMIN_EMAIL");
+        String adminPassword = System.getenv("EVENTOS_ADMIN_PASSWORD");
+        if (adminEmail != null && !adminEmail.isBlank() && adminPassword != null && !adminPassword.isBlank()) {
+            DatabaseSeeder.ensureAdministrator(userRepository, System.getenv("EVENTOS_ADMIN_NAME"), adminEmail, adminPassword);
+        }
+        if (seedLarge) {
+            DatabaseSeeder.seedLargeDataset(userRepository, eventRepository, activityRepository,
+                    registrationRepository, attendanceRepository);
+        }
 
-        // 4. Instancia Casos de Uso / Serviços de Aplicação (Ports & Adapters)
+        // 4. Casos de uso (portas de entrada) ligados às portas de saída.
         AuthUseCase authUseCase = new AuthServiceImpl(userRepository, securityAdapter);
         EventUseCase eventUseCase = new EventServiceImpl(eventRepository, activityRepository);
-        RegistrationUseCase registrationUseCase = new RegistrationServiceImpl(registrationRepository, eventRepository, activityRepository, userRepository);
-        AttendanceUseCase attendanceUseCase = new AttendanceServiceImpl(attendanceRepository, activityRepository, registrationRepository, userRepository, securityAdapter);
-        SurveyUseCase surveyUseCase = new SurveyServiceImpl(surveyRepository, activityRepository, registrationRepository, attendanceRepository, userRepository);
-        CertificateUseCase certificateUseCase = new CertificateServiceImpl(certificateRepository, eventRepository, activityRepository, attendanceRepository, registrationRepository, userRepository, pdfGeneratorAdapter);
-        ReportUseCase reportUseCase = new ReportServiceImpl(eventRepository, registrationRepository, activityRepository, attendanceRepository, userRepository, pdfGeneratorAdapter);
+        RegistrationUseCase registrationUseCase = new RegistrationServiceImpl(
+                registrationRepository, eventRepository, activityRepository, userRepository);
+        AttendanceUseCase attendanceUseCase = new AttendanceServiceImpl(attendanceRepository, activityRepository,
+                eventRepository, registrationRepository, userRepository, securityAdapter, qrCodeGenerator);
+        SurveyUseCase surveyUseCase = new SurveyServiceImpl(surveyRepository, activityRepository,
+                registrationRepository, attendanceRepository, eventRepository);
+        CertificateUseCase certificateUseCase = new CertificateServiceImpl(certificateRepository, eventRepository,
+                activityRepository, attendanceRepository, registrationRepository, userRepository, pdfGenerator,
+                emailSender, deliveryRepository);
+        ReportUseCase reportUseCase = new ReportServiceImpl(eventRepository, registrationRepository,
+                activityRepository, attendanceRepository, userRepository, pdfGenerator);
 
-        // 5. Configuração do Servidor Web e API REST (Javalin 6.x)
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
-
+        // 5. Adaptador de entrada: API REST (Javalin) e site público estático.
         Javalin app = Javalin.create(config -> {
-            config.jsonMapper(new JavalinJackson(objectMapper, true));
+            config.jsonMapper(ApiJson.javalinMapper());
             config.staticFiles.add(staticFiles -> {
                 staticFiles.hostedPath = "/";
                 staticFiles.directory = "/public";
                 staticFiles.location = Location.CLASSPATH;
             });
-        }).start(7000);
+        }).start(port);
 
-        // 6. Roteamento REST da API (RNF-02)
         new RestApiController(authUseCase, eventUseCase, registrationUseCase, attendanceUseCase,
                 surveyUseCase, certificateUseCase, reportUseCase, sessionStore, app);
+        if (demoMode) {
+            new DemoController(DatabaseSeeder.DEMO_ACCOUNTS.stream()
+                    .map(a -> new DemoController.Account(a.name(), a.email(), a.password(), a.role().name()))
+                    .toList()).register(app);
+        }
+        Runtime.getRuntime().addShutdownHook(new Thread(app::stop));
+        log.info("API REST e site público disponíveis em http://localhost:{}", port);
 
-        System.out.println("✔ Servidor REST e Site Público disponíveis em: http://localhost:7000");
-
-        // 7. Inicializa Aplicação Desktop (Java Swing) se houver ambiente gráfico disponível
-        if (!GraphicsEnvironment.isHeadless()) {
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-                } catch (Exception ignored) {}
-                EventOsApiClient apiClient = new EventOsApiClient("http://localhost:7000");
-                apiClient.login("marcio.giovane@universidade.edu.br", "marcio123");
-                SwingDesktopApp desktopApp = new SwingDesktopApp(apiClient);
-                desktopApp.setVisible(true);
-            });
+        // 6. Adaptador de entrada: desktop Swing, cliente da mesma API (somente com ambiente gráfico).
+        if (!noDesktop && !GraphicsEnvironment.isHeadless()) {
+            DesktopLauncher.launch("http://localhost:" + port);
         } else {
-            System.out.println("ℹ Ambiente Headless detectado. Executando em modo exclusivo de API/Web.");
+            log.info("Interface desktop não iniciada (modo headless ou --no-desktop): somente API e site.");
+        }
+    }
+
+    private static String resolvePublicUrl(int port) {
+        String configured = System.getenv("EVENTOS_PUBLIC_URL");
+        if (configured == null || configured.isBlank()) return "http://localhost:" + port;
+        return configured.trim().replaceAll("/+$", "");
+    }
+
+    private static int resolvePort() {
+        String configured = System.getenv("EVENTOS_PORT");
+        if (configured == null || configured.isBlank()) return 7000;
+        try {
+            return Integer.parseInt(configured.trim());
+        } catch (NumberFormatException e) {
+            log.warn("EVENTOS_PORT inválida ({}); usando 7000.", configured);
+            return 7000;
         }
     }
 }

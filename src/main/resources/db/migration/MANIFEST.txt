@@ -1,0 +1,7 @@
+# Ordem de execução dos scripts de migração do esquema (um por linha).
+# Ao criar um script novo (V<n>__descricao.sql), acrescente-o ao final desta lista.
+# Cada script roda uma única vez; a tabela schema_version registra o que já foi aplicado.
+V1__create_schema.sql
+V2__event_registration_configuration.sql
+V3__survey_policy_certificate_rules_and_indexes.sql
+V4__certificate_deliveries.sql
